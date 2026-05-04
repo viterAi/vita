@@ -10,7 +10,7 @@
   },
   "scripts": {
     "trigger:dev": "trigger dev",
-    "trigger:deploy": "trigger deploy"
+    "trigger:deploy": "trigger deploy --native-build-server"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
