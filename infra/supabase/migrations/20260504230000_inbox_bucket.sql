@@ -24,13 +24,13 @@ on conflict (id) do nothing;
 -- Members of <chat_slug> can upload zips for that chat.
 -- Service role bypasses RLS.
 
-create policy if not exists inbox_member_upload
+drop policy if exists inbox_member_upload on storage.objects;
+create policy inbox_member_upload
   on storage.objects
   for insert
   with check (
     bucket_id = 'inbox'
     and (
-      -- path shape: <tenant_slug>/<chat_slug>/<filename>.zip
       array_length(string_to_array(name, '/'), 1) >= 3
     )
     and exists (
@@ -44,7 +44,8 @@ create policy if not exists inbox_member_upload
     )
   );
 
-create policy if not exists inbox_member_read
+drop policy if exists inbox_member_read on storage.objects;
+create policy inbox_member_read
   on storage.objects
   for select
   using (
