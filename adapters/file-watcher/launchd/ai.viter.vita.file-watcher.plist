@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.viter.vita.file-watcher</string>
+
+  <!-- Run via bash -lc so it picks up Homebrew's pnpm/tsx from /opt/homebrew/bin -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd /Users/mordechai/viter-workspace/vita &amp;&amp; set -a &amp;&amp; source .env.local &amp;&amp; set +a &amp;&amp; exec pnpm --filter @vita/adapter-file-watcher watch</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/mordechai/viter-workspace/vita</string>
+
+  <!-- Make sure pnpm + tsx + node are findable; .env.local provides Supabase keys -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>/Users/mordechai</string>
+  </dict>
+
+  <!-- Lifecycle -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+    <key>Crashed</key>
+    <true/>
+  </dict>
+
+  <!-- Throttle restart attempts (prevent crash loop hammering) -->
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <!-- Logs -->
+  <key>StandardOutPath</key>
+  <string>/Users/mordechai/Library/Logs/vita-file-watcher.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mordechai/Library/Logs/vita-file-watcher.err.log</string>
+
+  <!-- Run as a user agent (not root) -->
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
