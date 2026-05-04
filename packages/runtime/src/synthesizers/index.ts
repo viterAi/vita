@@ -6,3 +6,5 @@ export type { CitedEventMap, ParsedCitations } from './citation-parser.js';
 export { createLLMClient } from './llm.js';
 export { synthesize } from './synthesizer.js';
 export type { SynthesizerDeps } from './synthesizer.js';
+export { scoreL2 } from './rubric.js';
+export type { RubricChecks, RubricScore, ScoreOptions } from './rubric.js';

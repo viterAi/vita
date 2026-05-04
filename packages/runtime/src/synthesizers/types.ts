@@ -76,4 +76,6 @@ export interface SynthesisResult {
   events_in_scope: number;
   events_cited: number;
   unresolved_codes: string[];   // [eN] codes the LLM cited but the parser couldn't map (signal for hallucination)
+  llm_call_id: UUID | null;     // backref to llm_call_log row (null if logging skipped)
+  latency_ms: number;           // wall-clock for the LLM completion
 }

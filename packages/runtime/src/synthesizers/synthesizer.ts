@@ -11,11 +11,14 @@
  * Returns SynthesisResult — with the inserted ID (or null on dryRun / empty scope) and diagnostics.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { scopeByDay } from './scopers/day.js';
 import { buildDayPrompt } from './prompts/day.js';
 import { resolveCitations } from './citation-parser.js';
+import { preparePayloadForLog } from '../utils/redact.js';
 import type {
   LLMClient,
   ScopeKind,
@@ -23,6 +26,12 @@ import type {
   SynthesizeOptions,
 } from './types.js';
 import type { UUID } from '../types.js';
+
+const PROMPT_VERSION_DAY = 'day-prompt-v2-deep';
+
+function sha256(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
 
 export interface SynthesizerDeps {
   db: SupabaseClient;
@@ -52,6 +61,8 @@ export async function synthesize(
       events_in_scope: 0,
       events_cited: 0,
       unresolved_codes: [],
+      llm_call_id: null,
+      latency_ms: 0,
     };
   }
 
@@ -59,15 +70,79 @@ export async function synthesize(
   const { systemPrompt, userPrompt, codeMap } = dispatchPromptBuilder(scopeKind, scopeKey, events);
 
   // ── 3. LLM ─────────────────────────────────────────────────────────
-  // OpenRouter-format default; Anthropic SDK strips 'anthropic/' prefix automatically
   const model = opts.modelOverride ?? 'anthropic/claude-opus-4-5';
-  const completion = await llm({
-    model,
-    systemPrompt,
-    userPrompt,
-    maxTokens: 4096,
-    temperature: 0.2,
-  });
+  const promptVersion = scopeKind === 'day' ? PROMPT_VERSION_DAY : 'unknown';
+  const params = { max_tokens: 16384, temperature: 0.2 };
+
+  // 3a. Open llm_call_log row (status='pending')
+  const { data: callRow } = await db
+    .from('llm_call_log')
+    .insert({
+      tenant_id: tenantId,
+      caller: `synthesizer.${scopeKind}`,
+      prompt_version: promptVersion,
+      scope_kind: scopeKind,
+      scope_key: scopeKey,
+      model_requested: model,
+      parameters: params,
+      system_prompt_hash: sha256(systemPrompt),
+      user_prompt_hash: sha256(userPrompt),
+      user_prompt_chars: userPrompt.length,
+      raw_request: preparePayloadForLog({ system: systemPrompt, user: userPrompt }),
+      status: 'running',
+    })
+    .select('id')
+    .single();
+  const llmCallId = (callRow?.id as UUID | undefined) ?? null;
+
+  const t0 = Date.now();
+  let completion;
+  try {
+    completion = await llm({
+      model,
+      systemPrompt,
+      userPrompt,
+      maxTokens: params.max_tokens,
+      temperature: params.temperature,
+    });
+  } catch (err) {
+    if (llmCallId) {
+      await db.from('llm_call_log').update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        latency_ms: Date.now() - t0,
+        error_message: err instanceof Error ? err.message : String(err),
+      }).eq('id', llmCallId);
+    }
+    throw err;
+  }
+  const latencyMs = Date.now() - t0;
+
+  // 3b. Close llm_call_log row with token usage + cost (computed client-side)
+  if (llmCallId) {
+    const usage = (completion.usage ?? {}) as Record<string, unknown>;
+    const promptTokens = (usage.prompt_tokens ?? usage.input_tokens) as number | undefined;
+    const completionTokens = (usage.completion_tokens ?? usage.output_tokens) as number | undefined;
+    const reasoningTokens = (usage.reasoning_tokens ?? null) as number | null;
+    const cachedTokens = (usage.cached_tokens ?? null) as number | null;
+    const totalTokens = (usage.total_tokens ?? ((promptTokens ?? 0) + (completionTokens ?? 0))) as number;
+
+    await db.from('llm_call_log').update({
+      status: 'ok',
+      completed_at: new Date().toISOString(),
+      latency_ms: latencyMs,
+      model_used: completion.generator_params?.model ?? model,
+      provider_name: completion.generator_params?.provider as string | undefined,
+      generation_id: (completion.generator_params?.generation_id as string | undefined) ?? null,
+      finish_reason: completion.generator_params?.finish_reason as string | undefined,
+      prompt_tokens: promptTokens ?? null,
+      completion_tokens: completionTokens ?? null,
+      reasoning_tokens: reasoningTokens,
+      cached_tokens: cachedTokens,
+      total_tokens: totalTokens,
+      raw_response: preparePayloadForLog({ body: completion.body, usage }),
+    }).eq('id', llmCallId);
+  }
 
   // ── 4. Resolve citations ───────────────────────────────────────────
   const parsed = resolveCitations(completion.body, codeMap);
@@ -97,6 +172,11 @@ export async function synthesize(
 
     if (error) throw new Error(`l2_syntheses insert: ${error.message}`);
     insertedId = data.id as UUID;
+
+    // Back-link the llm_call_log row to the inserted l2_synthesis
+    if (llmCallId && insertedId) {
+      await db.from('llm_call_log').update({ caller_ref: insertedId }).eq('id', llmCallId);
+    }
   }
 
   return {
@@ -110,6 +190,8 @@ export async function synthesize(
     events_in_scope: events.length,
     events_cited: parsed.cited_event_ids.length,
     unresolved_codes: parsed.unresolved_codes,
+    llm_call_id: llmCallId,
+    latency_ms: latencyMs,
   };
 }
 
