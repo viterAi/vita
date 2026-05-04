@@ -67,12 +67,14 @@ export const uploadZip = schemaTask({
     if (zipErr || !zipBlob) throw new Error(`zip download: ${zipErr?.message}`);
     const zipBytes = Buffer.from(await zipBlob.arrayBuffer());
 
-    // Unzip in container /tmp
+    // Unzip in container /tmp. The base image installs unzip via the aptGet
+    // build extension; on dev macs the system unzip is on PATH already.
     const tmpDir = mkdtempSync(join(tmpdir(), 'vita-zip-'));
     const zipPath = join(tmpDir, 'in.zip');
     writeFileSync(zipPath, zipBytes);
-    const r = spawnSync('unzip', ['-q', zipPath, '-d', tmpDir]);
-    if (r.status !== 0) throw new Error(`unzip ${r.status}: ${r.stderr?.toString().slice(0, 300)}`);
+    const unzipBin = process.env.UNZIP_PATH ?? 'unzip';
+    const r = spawnSync(unzipBin, ['-q', zipPath, '-d', tmpDir]);
+    if (r.status !== 0) throw new Error(`unzip ${r.status}: ${r.stderr?.toString().slice(0, 300) ?? 'spawn failed'}`);
 
     const files = readdirSync(tmpDir).filter((f) => f !== 'in.zip');
 

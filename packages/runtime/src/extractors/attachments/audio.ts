@@ -18,12 +18,15 @@ export const AUDIO_DEFAULT_MODEL = 'openai/whisper-large-v3-turbo';
 export const AUDIO_EXTRACTOR_VERSION = '2026-05-04';
 
 function opusToWav(input: Buffer): Buffer {
+  // Trigger.dev's ffmpeg extension sets FFMPEG_PATH; mac dev usually has
+  // `ffmpeg` on PATH directly. Honor the env if present.
+  const ffmpegBin = process.env.FFMPEG_PATH ?? 'ffmpeg';
   const dir = mkdtempSync(join(tmpdir(), 'vita-audio-'));
   const inPath = join(dir, 'in.opus');
   const outPath = join(dir, 'out.wav');
   try {
     writeFileSync(inPath, input);
-    const r = spawnSync('ffmpeg', [
+    const r = spawnSync(ffmpegBin, [
       '-y',
       '-loglevel', 'error',
       '-i', inPath,

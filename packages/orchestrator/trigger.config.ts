@@ -12,7 +12,7 @@
  */
 
 import { defineConfig } from '@trigger.dev/sdk';
-import { ffmpeg } from '@trigger.dev/build/extensions/core';
+import { ffmpeg, aptGet } from '@trigger.dev/build/extensions/core';
 
 export default defineConfig({
   project: 'proj_hvcfyxehhvtsodxlicvb',
@@ -27,6 +27,9 @@ export default defineConfig({
       // Installs ffmpeg in the deploy image so the audio extractor's
       // opus→wav transcode works without any wasm fallback.
       ffmpeg(),
+      // The base image is minimal — `unzip` is not present by default but
+      // upload-zip needs it to extract WhatsApp .zip exports.
+      aptGet({ packages: ['unzip'] }),
     ],
     external: ['mammoth', 'xlsx'],
   },
