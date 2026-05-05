@@ -1,8 +1,12 @@
 /**
- * /login — request a magic link.
+ * /login — request a 6-digit code (with magic-link fallback).
  *
  * Email-only. No password. Allowlist enforced server-side; same generic
  * "check your email" message either way so we don't leak membership.
+ *
+ * Why OTP code instead of magic-link click? Gmail's anti-phishing scanner
+ * silently fetches every link in incoming email, which consumes the
+ * single-use OTP before the user clicks. Codes don't have that problem.
  */
 
 import Link from 'next/link';
@@ -13,9 +17,17 @@ export const dynamic = 'force-dynamic';
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; sent?: string }>;
+  searchParams: Promise<{
+    next?: string;
+    err?: string;
+    error?: string;
+    error_description?: string;
+  }>;
 }) {
-  const { next, sent } = await searchParams;
+  const sp = await searchParams;
+  const initialError = sp.error_description
+    ? humanizeAuthError(sp.error_description, sp.error)
+    : sp.err;
 
   return (
     <div className="flex min-h-dvh flex-col bg-stone-100 dark:bg-zinc-950">
@@ -30,19 +42,18 @@ export default async function LoginPage({
             Sign in to vita
           </h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Enter your email — we&apos;ll send you a magic link.
+            Enter your email — we&apos;ll send you a 6-digit code.
           </p>
-
-          {sent ? (
-            <div className="mt-5 rounded-md bg-emerald-50 px-3 py-3 text-sm text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
-              <p>📬 Check <span className="font-semibold">{sent}</span> for the link.</p>
-              <p className="mt-1 text-xs opacity-80">It expires in 1 hour. Same link works once.</p>
-            </div>
-          ) : (
-            <LoginForm next={next} />
-          )}
+          <LoginForm next={sp.next} initialError={initialError} />
         </div>
       </main>
     </div>
   );
+}
+
+function humanizeAuthError(description: string, code?: string): string {
+  if (code === 'otp_expired' || description.includes('expired')) {
+    return 'That link expired (often Gmail\'s scanner consumes it before you click). Use the 6-digit code from the same email instead.';
+  }
+  return decodeURIComponent(description.replace(/\+/g, ' '));
 }
