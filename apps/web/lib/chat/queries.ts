@@ -26,7 +26,8 @@ export async function loadChannelGroups(): Promise<ChannelGroup[]> {
   const { data: channels, error } = await db
     .from('channels')
     .select('id, identifier, display_name, kind, metadata')
-    .eq('tenant_id', tenantId);
+    .eq('tenant_id', tenantId)
+    .not('identifier', 'like', 'archived\\_\\_%');  // hide channels merged into others
   if (error) throw new Error(`channels: ${error.message}`);
 
   if (!channels || channels.length === 0) return [];
