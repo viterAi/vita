@@ -74,7 +74,11 @@ Mrodchi → writes → L2 Supabase tables
 
 The contract between Mrodchi and the View Builder is the **L2 table schema** — what tables exist, what columns they have, and what the data means semantically.
 
-**Open question for Mrodchi:** what are the L2 tables and their schemas? The View Builder needs this to build the Data Analysis and Spec Composition skills correctly.
+The primary table is `l2_syntheses` — each row is an AI-generated synthesis scoped by `scope_kind` + `scope_key` (e.g. `scope_kind: "day"`, `scope_key: "2026-04-29"`). The `body` field contains the synthesis content as text (likely markdown). Source tracing is done via `cites_event_ids` → `l1_events` → `l0_artifacts`.
+
+See **[`docs/l2-schema-notes.md`](./l2-schema-notes.md)** for full schema details, current data counts, and SQL traces.
+
+**Open question for Mrodchi:** what `scope_kind` values will exist beyond `"day"`? What format is `body` in? When will `l3_surfaces` be populated?
 
 ---
 
