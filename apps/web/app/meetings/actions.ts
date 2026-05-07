@@ -3,16 +3,13 @@
 /**
  * Server actions for the meetings upload surface.
  *
- * The browser uploads audio bytes directly to Supabase Storage at
- *   `inbox/<tenant>/meetings/<slug>/<filename>`
- * The `inbox-webhook` Edge Function dispatches to the `ingest-meeting`
- * Trigger.dev task on object-created. RLS on the inbox bucket gates
- * uploads on `user_can_read_channel(meeting:<slug>)` — so the channel
- * row must exist before the user can drop a file.
+ * Flow: browser calls ensureMeetingChannel → gets back a signed upload URL
+ * (per file, generated via service-role). Browser uploads directly to the
+ * signed URL — no browser auth or RLS evaluation on the upload itself.
  *
- * `ensureMeetingChannel` upserts the channel row + returns the canonical
- * upload prefix the client should use. Service-role bypasses RLS for the
- * upsert so this works even before auth is fully wired.
+ * Signed URLs are single-use, expire in 60 s, and are scoped to the exact
+ * storage path. The inbox-webhook Edge Function fires on object-created
+ * regardless of whether the upload used a signed URL or direct auth.
  */
 
 import { revalidatePath } from 'next/cache';
@@ -31,6 +28,14 @@ export interface EnsureMeetingChannelResult {
   meeting_slug?: string;
   channel_id?: string;
   upload_prefix?: string;            // e.g. 'viter/meetings/ahiya-2026-05-05/'
+}
+
+export interface GetSignedUploadUrlResult {
+  ok: boolean;
+  error?: string;
+  signed_url?: string;
+  path?: string;
+  token?: string;
 }
 
 const SLUG_RX = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
@@ -84,6 +89,36 @@ export async function ensureMeetingChannel(args: EnsureMeetingChannelArgs): Prom
     meeting_slug: meetingSlug,
     channel_id: ch.id as string,
     upload_prefix: `${tenantSlug}/meetings/${meetingSlug}/`,
+  };
+}
+
+/**
+ * Generate a signed upload URL for one file. Called per-file by the dropzone
+ * so the browser can PUT bytes directly to Supabase Storage without needing
+ * its own auth session — the service-role key on the server signs the URL.
+ */
+export async function getSignedUploadUrl(
+  uploadPrefix: string,
+  filename: string,
+): Promise<GetSignedUploadUrlResult> {
+  if (!uploadPrefix || !filename) return { ok: false, error: 'prefix and filename required' };
+
+  const db = getServiceRoleClient();
+  const path = `${uploadPrefix}${filename}`;
+
+  const { data, error } = await db.storage
+    .from('inbox')
+    .createSignedUploadUrl(path);
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? 'failed to create signed URL' };
+  }
+
+  return {
+    ok: true,
+    signed_url: data.signedUrl,
+    path: data.path,
+    token: data.token,
   };
 }
 

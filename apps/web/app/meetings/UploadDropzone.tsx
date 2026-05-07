@@ -18,8 +18,7 @@
  */
 
 import { useState, useCallback, useTransition, type DragEvent } from 'react';
-import { getBrowserClient } from '@/lib/supabase/browser';
-import { ensureMeetingChannel, suggestMeetingSlug } from './actions';
+import { ensureMeetingChannel, getSignedUploadUrl, suggestMeetingSlug } from './actions';
 
 interface FileState {
   file: File;
@@ -96,25 +95,29 @@ export default function UploadDropzone({ initialSlug }: UploadDropzoneProps) {
   }, []);
 
   const uploadOne = useCallback(async (idx: number, file: File, prefix: string) => {
-    const supabase = getBrowserClient();
     setFiles((prev) => prev.map((f, i) => i === idx ? { ...f, status: 'uploading' } : f));
 
     try {
-      const path = `${prefix}${file.name}`;
-      // The supabase-js v2 storage upload takes a File/Blob/ArrayBuffer; it
-      // doesn't expose per-byte progress, so we just flip status when done.
-      const { error } = await supabase.storage
-        .from('inbox')
-        .upload(path, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-          cacheControl: '3600',
-        });
-      if (error) {
-        const msg = error.message ?? 'upload failed';
-        setFiles((prev) => prev.map((f, i) => i === idx ? { ...f, status: 'error', error: msg } : f));
+      // Get a signed upload URL from the server — no browser auth needed.
+      const signed = await getSignedUploadUrl(prefix, file.name);
+      if (!signed.ok || !signed.signed_url) {
+        setFiles((prev) => prev.map((f, i) => i === idx ? { ...f, status: 'error', error: signed.error ?? 'could not get upload URL' } : f));
         return;
       }
+
+      // PUT directly to the signed URL. Supabase Storage accepts the raw
+      // file bytes; the Content-Type header triggers the inbox-webhook.
+      const res = await fetch(signed.signed_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        setFiles((prev) => prev.map((f, i) => i === idx ? { ...f, status: 'error', error: `upload ${res.status}: ${body.slice(0, 120)}` } : f));
+        return;
+      }
+
       setFiles((prev) => prev.map((f, i) =>
         i === idx ? { ...f, status: 'done', progressBytes: file.size } : f
       ));
