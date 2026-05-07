@@ -106,6 +106,6 @@ export default defineConfig({
       additionalFiles({ files: ['vendored/**'] }),
       aliasWorkspaceDepsExtension,
     ],
-    external: ['mammoth', 'xlsx'],
+    external: ['mammoth', 'xlsx', 'openai', '@anthropic-ai/sdk'],
   },
 });
