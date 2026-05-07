@@ -1,0 +1,1 @@
+{"version":3,"file":"audio.d.ts","sourceRoot":"","sources":["../../../src/extractors/attachments/audio.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAOH,OAAO,KAAK,EAAE,eAAe,EAAE,gBAAgB,EAAE,gBAAgB,EAAE,MAAM,SAAS,CAAC;AAKnF,eAAO,MAAM,mBAAmB,kCAAkC,CAAC;AACnE,eAAO,MAAM,uBAAuB,eAAe,CAAC;AA8BpD,wBAAsB,YAAY,CAChC,KAAK,EAAE,eAAe,EACtB,GAAG,EAAE,gBAAgB,GACpB,OAAO,CAAC,gBAAgB,CAAC,CAgJ3B"}

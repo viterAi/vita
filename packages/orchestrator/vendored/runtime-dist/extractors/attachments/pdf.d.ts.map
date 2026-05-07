@@ -1,0 +1,1 @@
+{"version":3,"file":"pdf.d.ts","sourceRoot":"","sources":["../../../src/extractors/attachments/pdf.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAEH,OAAO,KAAK,EAAE,eAAe,EAAE,gBAAgB,EAAE,gBAAgB,EAAE,MAAM,SAAS,CAAC;AAGnF,eAAO,MAAM,iBAAiB,iCAAiC,CAAC;AAChE,eAAO,MAAM,qBAAqB,eAAe,CAAC;AAOlD,wBAAsB,UAAU,CAC9B,KAAK,EAAE,eAAe,EACtB,GAAG,EAAE,gBAAgB,GACpB,OAAO,CAAC,gBAAgB,CAAC,CAgE3B"}

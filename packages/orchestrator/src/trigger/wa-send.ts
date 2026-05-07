@@ -58,7 +58,7 @@ export const waSend = schemaTask({
     // 1. Resolve device + verify it's linked
     const { data: device, error: dErr } = await supabase
       .from('whatsapp_devices')
-      .select('id, gowa_device_id, status, phone_number')
+      .select('id, gowa_device_id, status, phone_number, metadata')
       .eq('id', payload.whatsapp_devices_id)
       .eq('tenant_id', payload.tenant_id)
       .single();
@@ -91,6 +91,10 @@ export const waSend = schemaTask({
       basicAuth: process.env.GOWA_BASIC_AUTH ?? undefined,
     });
 
+    // gowa_device_id stores the JID (for webhook lookup); GOWA REST API requires the UUID
+    const gowaApiId = (device.metadata as Record<string, unknown>)?.gowa_uuid as string | undefined
+      ?? device.gowa_device_id;
+
     const sendArgs: { phone: string; message: string; reply_to_message_id?: string } = {
       phone: payload.to,
       message: payload.text,
@@ -99,7 +103,7 @@ export const waSend = schemaTask({
 
     let resp;
     try {
-      resp = await gowa.sendText(device.gowa_device_id, sendArgs);
+      resp = await gowa.sendText(gowaApiId, sendArgs);
     } catch (err) {
       if (err instanceof GowaError) {
         if (err.status === 429) {
