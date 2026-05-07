@@ -9,7 +9,7 @@
 
 ## Purpose
 
-This document defines how the View Builder integrates with the broader platform. It is a shared contract between the View Builder (Issac) and Mrodchi's server (platform data + intelligence layer). Both sides must agree on this before either side builds against the interface.
+This document defines how the View Builder integrates with the broader platform. It is a shared contract between the View Builder (Issac) and Mrodchi (platform data + intelligence layer). Both sides must agree on this before either side builds against the interface.
 
 ---
 
@@ -17,7 +17,7 @@ This document defines how the View Builder integrates with the broader platform.
 
 The View Builder is a **pure rendering layer**. It receives data and intent, generates a view spec, and renders it. It does not own auth, data collection, user intelligence, or agent memory.
 
-Everything else — auth, data ingestion, surfacing logic, ToM, agent memory — is owned by Mrodchi's server.
+Everything else — auth, data ingestion, surfacing logic, ToM, agent memory — is owned by Mrodchi.
 
 ---
 
@@ -45,14 +45,15 @@ The platform has three permanent layers. The View Builder produces output for th
 | Concern | Owner |
 |---------|-------|
 | Shell chrome (murmur / surface / dock layout) | Platform shell |
-| Auth, user identity, permissions | Platform shell / Mrodchi |
-| Data ingestion, source connectors | Mrodchi's server |
-| User intelligence, ToM, preferences | Mrodchi's server |
+| Auth, user identity, permissions | Supabase (RLS) |
+| Data ingestion, source connectors | Mrodchi |
+| User intelligence, ToM, preferences | Mrodchi |
 | Dock chat UI | Platform shell |
 | Deciding view type + intent from user message | Mrodchi |
 | Spec composition (how to render a view) | View Builder |
 | Component library, skills, rendering rules | View Builder |
 | Spec storage and versioning | View Builder (Supabase `views` table) |
+| Design tokens | View Builder (fetched from Supabase by tenant/user) |
 | Spec schema and format | View Builder owns the view layer; data field schema is a shared contract |
 
 ---
@@ -61,13 +62,13 @@ The platform has three permanent layers. The View Builder produces output for th
 
 ### How data reaches the View Builder
 
-1. Mrodchi's server (or a Supabase Edge Function it controls) writes source data to a Supabase table
+1. Mrodchi (or a Supabase Edge Function he controls) writes source data to a Supabase table
 2. The View Builder reads from that table when generating or refreshing a view
 3. The View Builder never fetches data directly from source systems — all data arrives via Supabase
 
 ### The data handshake (hypothesis — to be confirmed with Mrodchi)
 
-When Mrodchi triggers a new view, it passes:
+When Mrodchi triggers a new view, he passes:
 
 ```json
 {
@@ -76,8 +77,8 @@ When Mrodchi triggers a new view, it passes:
   "data": {
     "index": "markdown description: what this data is, what to do with it, field meanings",
     "sources": [
-      { "type": "markdown", "content": "..." },
-      { "type": "file_path", "path": "/path/to/data.csv" }
+      { "type": "markdown", "content": "...", "volatility": "snapshot" },
+      { "type": "file_path", "path": "/path/to/data.csv", "volatility": "live" }
     ]
   }
 }
@@ -87,6 +88,7 @@ When Mrodchi triggers a new view, it passes:
 - `view_type` — Mrodchi decides this based on user context and ToM (`spatial` / `sequential` / `briefing` / `weighted_card` / `config`)
 - `data.index` — markdown description of what the data means (semantic, not just structural)
 - `data.sources` — array of data sources: inline markdown blocks or file paths to fetch
+- `volatility` — Mrodchi flags whether each source is a live feed or a snapshot; View Builder maps this to `mode: static/dynamic` and `trigger` fields in the spec
 
 **This format is a working hypothesis. Final schema to be agreed with Mrodchi.**
 
@@ -158,8 +160,6 @@ Intent + data payload (from Mrodchi)
 
 ### View-type skills (one invoked per generation)
 
-Each view type has its own skill encoding the cognitive model and UX rules for that mode:
-
 | Skill | When invoked | Key rules |
 |---|---|---|
 | **Spatial View** | Dashboards, boards, monitoring | F-pattern layout, ≤12 KPIs, 5-second comprehension, chart type matching |
@@ -184,17 +184,57 @@ Skills are internal to the View Builder. Mrodchi does not invoke skills directly
 
 ---
 
+## Auth
+
+Auth is handled entirely by Supabase. The View Builder reads the active Supabase session at render time. Row-level security on the `views` table enforces permissions. Mrodchi does not pass auth context — it is never in the handshake payload.
+
+---
+
 ## Action Routing (OPEN — to be decided)
 
-When a user takes an action inside a generated view (clicks a button, submits a form), routing is TBD:
+When a user takes an action inside a generated view (clicks a button, submits a form):
 
-| Action type | Candidate handler | Notes |
-|---|---|---|
-| Ephemeral filter / UI-only | View Builder (in-memory) | No external call needed |
-| Persistent write-back to source | Supabase events table? Direct to Mrodchi? | To be decided |
-| Agent-triggering action | MCP server call? | To be decided |
+| Action type | Handler |
+|---|---|
+| Ephemeral filter / UI-only | View Builder (in-memory) — no external call |
+| Persistent write-back to source | To be decided with Mrodchi |
+| Agent-triggering action | Calls Mrodchi's MCP server |
 
-**This needs a joint decision with Mrodchi before write-back is implemented.**
+**Boundary-crossing actions (write-back, agent-triggering) are logged to a Supabase `events` table.** Whether pure UI interactions should also be logged is an open question for the joint session.
+
+---
+
+## Multi-View Model
+
+Multiple views per source are supported — tabs, add, rename, reorder, duplicate, delete, set default, composed mode (views side by side). This is entirely internal to the View Builder. Mrodchi does not manage tabs.
+
+If Mrodchi needs to know what views exist for a source, he can query the `views` table in Supabase directly using `source_id`. Suggestion to raise in the joint session.
+
+---
+
+## Static vs. Dynamic Components
+
+The spec marks each component with a `mode` field:
+- `mode: "static"` — data refreshes, structure doesn't change
+- `mode: "dynamic"` — can be swapped/updated based on triggers (e.g. `data_change`, `agent_event`)
+
+Mrodchi flags **data volatility** in the handshake payload (see `volatility` field above). The View Builder translates this into `mode` and `trigger` fields in the spec. The exact schema for expressing volatility is to be agreed with Mrodchi.
+
+---
+
+## Design Tokens
+
+Components accept design tokens as parameters from day one (not hardcoded styles). Tokens are fetched from Supabase by the View Builder based on tenant/user context. Mrodchi never passes tokens — they are entirely internal to the View Builder's rendering layer.
+
+Token schema: `primary_color`, `secondary_color`, `font_family`, `card_radius`, `button_style`, `table_density`. Full token support is Month 3+ but components are built to accept them from the start.
+
+---
+
+## MCP Apps (Future — Month 3+)
+
+From Month 3, the View Builder will produce **self-contained HTML bundles** delivered via the MCP Apps protocol, renderable in Claude, ChatGPT, WhatsApp, and email from the same spec.
+
+The handshake payload between Mrodchi and the View Builder will not change — Mrodchi passes intent + data, the View Builder changes what it produces under the hood. Mrodchi should be aware this migration is coming and avoid building hard dependencies on the current rendering format.
 
 ---
 
@@ -208,11 +248,13 @@ When a user takes an action inside a generated view (clicks a button, submits a 
 
 ## Open Questions (For Mrodchi)
 
-1. **Data handshake schema** — confirm or revise the `{ intent, view_type, data }` structure
+1. **Data handshake schema** — confirm or revise the `{ intent, view_type, data }` structure including the `volatility` field
 2. **Action routing** — how do persistent write-back and agent-triggering actions get routed?
-3. **Edge Function ownership** — who maintains the Supabase Edge Function that serves data to the View Builder?
-4. **View type decision** — does Mrodchi always decide `view_type`, or can the View Builder suggest one if Mrodchi doesn't specify?
-5. **MCP data agent interface** — what does the View Builder call, with what arguments, when it needs additional data mid-steer?
+3. **Action logging scope** — log boundary-crossing actions only, or all UI interactions?
+4. **Edge Function ownership** — who maintains the Supabase Edge Function that serves data to the View Builder?
+5. **View type decision** — does Mrodchi always decide `view_type`, or can the View Builder suggest one if Mrodchi doesn't specify?
+6. **MCP data agent interface** — what does the View Builder call, with what arguments, when it needs additional data mid-steer?
+7. **Multi-view visibility** — should Mrodchi query the `views` table directly, or does the View Builder expose an endpoint?
 
 ---
 
@@ -220,6 +262,6 @@ When a user takes an action inside a generated view (clicks a button, submits a 
 
 - [ ] Share this doc with Mrodchi for review
 - [ ] Resolve open questions (joint session)
-- [ ] Confirm data handshake schema
+- [ ] Confirm data handshake schema including volatility field
 - [ ] Finalize action routing decision
 - [ ] Mark integration plan approved → unblocks spec format work and shell build
