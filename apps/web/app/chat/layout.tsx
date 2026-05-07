@@ -8,12 +8,12 @@
 import Link from 'next/link';
 import { ChannelRail } from './ChannelRail';
 import { RailRealtime } from './RailRealtime';
-import { loadChannelGroups } from '@/lib/chat/queries';
+import { loadChannels } from '@/lib/chat/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ChatLayout({ children }: { children: React.ReactNode }) {
-  const groups = await loadChannelGroups();
+  const channels = await loadChannels();
 
   return (
     <div className="flex h-dvh flex-col bg-stone-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
@@ -48,7 +48,7 @@ export default async function ChatLayout({ children }: { children: React.ReactNo
       {/* Body — rail | conversation */}
       <div className="grid min-h-0 flex-1 grid-cols-[320px_1fr]">
         <aside className="min-h-0 overflow-y-auto border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <ChannelRail groups={groups} />
+          <ChannelRail channels={channels} />
         </aside>
         <main className="min-h-0 overflow-hidden">{children}</main>
       </div>

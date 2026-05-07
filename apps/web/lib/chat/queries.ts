@@ -18,6 +18,19 @@ const KIND_LABELS: Record<string, string> = {
 
 const KIND_ORDER = ['whatsapp', 'meeting', 'email', 'claude-code', 'cursor', 'screenpipe-app', 'vita-chat'];
 
+/** Load all channels flat, sorted by latest activity descending. */
+export async function loadChannels(): Promise<Channel[]> {
+  const groups = await loadChannelGroups();
+  const flat = groups.flatMap((g) => g.channels);
+  flat.sort((a, b) => {
+    if (a.latest_event_at && b.latest_event_at) return b.latest_event_at.localeCompare(a.latest_event_at);
+    if (a.latest_event_at) return -1;
+    if (b.latest_event_at) return 1;
+    return (a.display_name ?? a.identifier).localeCompare(b.display_name ?? b.identifier);
+  });
+  return flat;
+}
+
 /** Load all channels with their latest-message preview, grouped by kind. */
 export async function loadChannelGroups(): Promise<ChannelGroup[]> {
   const tenantId = await getCurrentTenantId();

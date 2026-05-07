@@ -26,7 +26,15 @@ interface FrontMatter {
 }
 
 function parseFrontMatter(body: string): { meta: FrontMatter; content: string } {
-  const match = body.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  let work = body.trim();
+
+  // LLM sometimes wraps the YAML block in ```yaml ... ``` — strip that first
+  const fenced = work.match(/^```yaml\n(---[\s\S]*?---)\n```\n?([\s\S]*)$/);
+  if (fenced) {
+    work = (fenced[1] ?? '') + '\n' + (fenced[2] ?? '');
+  }
+
+  const match = work.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return { meta: {}, content: body };
 
   const yamlLines = (match[1] ?? '').split('\n');
@@ -37,7 +45,12 @@ function parseFrontMatter(body: string): { meta: FrontMatter; content: string } 
       (meta as Record<string, string>)[key.trim()] = rest.join(':').trim();
     }
   }
-  return { meta, content: (match[2] ?? '').trim() };
+
+  // Strip wrapping ``` code fence from the markdown body (LLM sometimes adds it)
+  let content = (match[2] ?? '').trim();
+  content = content.replace(/^```\w*\n/, '').replace(/\n```\s*$/, '').trim();
+
+  return { meta, content };
 }
 
 export function MeetingL2Panel({ body, generated_at, scope_key }: MeetingL2PanelProps) {

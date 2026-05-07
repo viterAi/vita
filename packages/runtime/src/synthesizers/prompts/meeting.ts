@@ -34,7 +34,8 @@ Your job: produce a **concise, actionable meeting brief** from a transcript of u
 
 ## Output structure
 
-\`\`\`yaml
+Output the YAML front matter **raw** (no code fences), then the markdown body immediately after:
+
 ---
 meeting: <channel identifier>
 speakers: [<list of speaker names present>]
@@ -43,11 +44,7 @@ utterances: <count>
 decisions: <count of binding decisions>
 open_threads: <count>
 ---
-\`\`\`
 
-Then:
-
-\`\`\`
 # <Meeting title inferred from content>
 
 ## TL;DR
@@ -72,8 +69,7 @@ Then:
 <If any speaker corrected themselves or another. Quote both sides.>
 
 ## The load-bearing quote
-> *"<exact words>"* — <Speaker> [eN]
-\`\`\``;
+> *"<exact words>"* — <Speaker> [eN]`;
 
 export function buildMeetingPrompt(
   scopeKey: string,
