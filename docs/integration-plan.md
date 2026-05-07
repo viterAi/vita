@@ -130,6 +130,50 @@ All communication with Mrodchi goes through his MCP server. The View Builder cal
 
 ---
 
+## How Skills Work
+
+Skills are `SKILL.md` files that encode the rules the AI follows when generating views. They are not prompts buried in code — they are readable files, version-controlled in the repo, that any agent (or human) can inspect and update.
+
+### Generation pipeline
+
+When a view is requested, skills chain in this order:
+
+```
+Intent + data payload (from Mrodchi)
+  → Data Analysis skill        what does this data actually mean semantically?
+  → Spec Composition skill     which view type? what emphasis? which skill to invoke?
+  → View-Type skill            how to lay it out, which components, which rules apply
+  → Spec Validation skill      does the generated spec follow the rules?
+  → Renderer                   build the HTML/component bundle
+```
+
+### Pipeline skills (run every generation)
+
+| Skill | Role |
+|---|---|
+| **Data Analysis** | Goes from structural ("this is a table with 3 rows") to semantic ("these are overdue invoices needing approval by Friday"). Feeds meaning into the spec. |
+| **Spec Composition** | Decides which view-type skill to invoke based on data semantics + Mrodchi's intent. Handles ambiguous cases. |
+| **Spec Validation** | Checks the generated spec against the rules of its view type before rendering. Catches bad field references, missing components, rule violations. |
+| **Eval** | Offline only — runs AI generation against golden test cases, scores pass/fail per rule. Not part of live generation. |
+
+### View-type skills (one invoked per generation)
+
+Each view type has its own skill encoding the cognitive model and UX rules for that mode:
+
+| Skill | When invoked | Key rules |
+|---|---|---|
+| **Spatial View** | Dashboards, boards, monitoring | F-pattern layout, ≤12 KPIs, 5-second comprehension, chart type matching |
+| **Sequential View** | Triage queues, checklists, approval flows | One item at a time, ≤4 action buttons, progress visibility, escape hatches |
+| **Briefing View** | Digests, summaries, catch-up surfaces | Time-bounded framing, prioritization hierarchy, "you're caught up" completion signal |
+| **Weighted Card View** | Home surface | Enough context per card to decide without opening, priority-driven sizing, progressive disclosure |
+| **Configuration View** | Source config, flow boards, permissions | Stable layout, drag-and-drop blocks, authorize/confirm pattern |
+
+### Skills and the integration boundary
+
+Skills are internal to the View Builder. Mrodchi does not invoke skills directly — he passes `view_type` + intent in the handshake payload, and the View Builder's Spec Composition skill decides which view-type skill to run. Mrodchi never needs to know which skill ran or what rules it applied.
+
+---
+
 ## Spec Persistence
 
 - Generated views are **ephemeral by default**
