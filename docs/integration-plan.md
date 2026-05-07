@@ -62,35 +62,19 @@ The platform has three permanent layers. The View Builder produces output for th
 
 ### How data reaches the View Builder
 
-1. Mrodchi (or a Supabase Edge Function he controls) writes source data to a Supabase table
-2. The View Builder reads from that table when generating or refreshing a view
-3. The View Builder never fetches data directly from source systems — all data arrives via Supabase
+There is no payload handshake between Mrodchi and the View Builder. The View Builder reads directly from Mrodchi's **L2 Supabase tables**. Mrodchi writes to those tables — the View Builder reads from them. No data is passed between systems at request time.
 
-### The data handshake (hypothesis — to be confirmed with Mrodchi)
-
-When Mrodchi triggers a new view, he passes:
-
-```json
-{
-  "intent": "show aging receivables by client",
-  "view_type": "spatial",
-  "data": {
-    "index": "markdown description: what this data is, what to do with it, field meanings",
-    "sources": [
-      { "type": "markdown", "content": "...", "volatility": "snapshot" },
-      { "type": "file_path", "path": "/path/to/data.csv", "volatility": "live" }
-    ]
-  }
-}
+```
+Mrodchi → writes → L2 Supabase tables
+                        ↓
+              View Builder reads directly
+                        ↓
+                   Renders view
 ```
 
-- `intent` — natural language description of what the user wants
-- `view_type` — Mrodchi decides this based on user context and ToM (`spatial` / `sequential` / `briefing` / `weighted_card` / `config`)
-- `data.index` — markdown description of what the data means (semantic, not just structural)
-- `data.sources` — array of data sources: inline markdown blocks or file paths to fetch
-- `volatility` — Mrodchi flags whether each source is a live feed or a snapshot; View Builder maps this to `mode: static/dynamic` and `trigger` fields in the spec
+The contract between Mrodchi and the View Builder is the **L2 table schema** — what tables exist, what columns they have, and what the data means semantically.
 
-**This format is a working hypothesis. Final schema to be agreed with Mrodchi.**
+**Open question for Mrodchi:** what are the L2 tables and their schemas? The View Builder needs this to build the Data Analysis and Spec Composition skills correctly.
 
 ---
 
@@ -100,8 +84,8 @@ When Mrodchi triggers a new view, he passes:
 
 ```
 User opens source / requests view
-  → Mrodchi: understands intent + context → picks view_type → sends handshake payload
-  → View Builder: receives payload → composes spec using view-type skill → renders
+  → Mrodchi: understands intent + context → picks view_type → passes intent to View Builder
+  → View Builder: reads L2 Supabase tables → composes spec using view-type skill → renders
   → Surface: displays view (ephemeral — not saved yet)
   → User: steers or says "save this"
   → View Builder: writes spec to Supabase views table
@@ -218,7 +202,7 @@ The spec marks each component with a `mode` field:
 - `mode: "static"` — data refreshes, structure doesn't change
 - `mode: "dynamic"` — can be swapped/updated based on triggers (e.g. `data_change`, `agent_event`)
 
-Mrodchi flags **data volatility** in the handshake payload (see `volatility` field above). The View Builder translates this into `mode` and `trigger` fields in the spec. The exact schema for expressing volatility is to be agreed with Mrodchi.
+The View Builder infers volatility from the L2 table schema — which columns are live feeds vs. snapshots. This is determined when the View Builder reads the table, not passed by Mrodchi. The exact inference rules are an internal View Builder concern.
 
 ---
 
@@ -248,7 +232,7 @@ The handshake payload between Mrodchi and the View Builder will not change — M
 
 ## Open Questions (For Mrodchi)
 
-1. **Data handshake schema** — confirm or revise the `{ intent, view_type, data }` structure including the `volatility` field
+1. **L2 table schema** — what tables exist, what columns, what does each field mean semantically? This is the core contract the View Builder builds against.
 2. **Action routing** — how do persistent write-back and agent-triggering actions get routed?
 3. **Action logging scope** — log boundary-crossing actions only, or all UI interactions?
 4. **Edge Function ownership** — who maintains the Supabase Edge Function that serves data to the View Builder?
@@ -262,6 +246,6 @@ The handshake payload between Mrodchi and the View Builder will not change — M
 
 - [ ] Share this doc with Mrodchi for review
 - [ ] Resolve open questions (joint session)
-- [ ] Confirm data handshake schema including volatility field
+- [ ] Get L2 table schema from Mrodchi — this is the core contract
 - [ ] Finalize action routing decision
 - [ ] Mark integration plan approved → unblocks spec format work and shell build
