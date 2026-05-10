@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getMockMessages, getMockChats } from "../../../../../lib/l0/mock-data";
+import { getSupabaseServerClient } from "../../../../../lib/supabase/server";
 import { getCatalogPromptBlock } from "../../../../../lib/layout/component-catalog";
 import {
   fillPageComponents,
@@ -179,24 +180,32 @@ async function answerQuery(input: {
   rows: SourceDataRow[];
   sourceName: string;
   currentPages: IncomingPage[];
+  allSources: IncomingSource[];
 }): Promise<string> {
 
-  // ── Step 1: try from source rows ─────────────────────────────────────────
+  // Source directory — always included so the AI can answer cross-source/meta questions
+  const sourceDirectory = input.allSources.length > 0
+    ? `All available sources (${input.allSources.length}):\n${input.allSources.map((s) => `- ${s.name} (id: ${s.id})`).join("\n")}`
+    : "";
+
+  // ── Step 1: try from source directory + current source rows ──────────────
   const rowsContext = input.rows.length > 0
-    ? `Source rows (${input.rows.length} total, showing up to 30):\n${JSON.stringify(input.rows.slice(0, 30))}`
-    : "No structured rows available for this source.";
+    ? `Current source: ${input.sourceName}\nSource rows (${input.rows.length} total, showing up to 30):\n${JSON.stringify(input.rows.slice(0, 30))}`
+    : `Current source: ${input.sourceName}\nNo structured rows available for this source.`;
+
+  const step1Context = [sourceDirectory, rowsContext].filter(Boolean).join("\n\n");
 
   const attempt1 = await attemptAnswer({
     question: input.question,
     sourceName: input.sourceName,
-    dataContext: rowsContext,
+    dataContext: step1Context,
   });
 
   if (attempt1.confidence === "high") return attempt1.answer;
 
   // ── Step 2: add page component props (computed KPIs, lists, aggregates) ──
   const pageContext = extractPageContext(input.currentPages);
-  const combinedContext = [rowsContext, pageContext ? `\nComputed page data:\n${pageContext}` : ""].join("");
+  const combinedContext = [step1Context, pageContext ? `\nComputed page data:\n${pageContext}` : ""].join("");
 
   const attempt2 = await attemptAnswer({
     question: input.question,
@@ -226,6 +235,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sourceId: string }> },
 ) {
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: "unauthenticated" }, { status: 401 });
+
   const { sourceId } = await params;
 
   const body = (await request.json()) as {
@@ -291,6 +304,7 @@ export async function POST(
             rows,
             sourceName: source.name,
             currentPages,
+            allSources: sources,
           });
           emit({ type: "query_answer", answer });
           emit({ type: "done", ai_pages: currentPages, ai_status: { state: "ready", last_error: null }, ai_page_statuses: [], ai_warnings: [] });

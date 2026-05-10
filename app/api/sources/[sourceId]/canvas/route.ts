@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import type { SourceDataRow } from "../../../../../lib/types/view-builder";
 import { getMockMessages } from "../../../../../lib/l0/mock-data";
+import { getSupabaseServerClient } from "../../../../../lib/supabase/server";
 import { getCatalogPromptBlock } from "../../../../../lib/layout/component-catalog";
 import {
   fillPageComponents,
@@ -19,6 +20,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sourceId: string }> },
 ) {
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: "unauthenticated" }, { status: 401 });
+
   const { sourceId } = await params;
   void request;
 

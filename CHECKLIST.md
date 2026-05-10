@@ -1,7 +1,7 @@
 # View Builder — Requirements Checklist v2
 
 **For:** Issac Brown  
-**Last updated:** May 7, 2026  
+**Last updated:** May 10, 2026 (codebase audit)  
 **Converged with:** Platform Agent & Personnel OS conversations
 
 Check off each item when complete. Items marked ⚡ are blocking other work.
@@ -11,36 +11,51 @@ Check off each item when complete. Items marked ⚡ are blocking other work.
 ## 1. Infrastructure & Security
 
 - [x] Railway deployment taken offline ⚡
-- [ ] App runs locally only until integration plan is approved
-- [ ] Supabase credentials not exposed in any public URL or repo
+- [X] App runs locally only until integration plan is approved
+- [x] Supabase credentials not exposed in any public URL or repo — `.env` was committed, removed May 10. **Rotate all keys: both Supabase projects + OpenRouter.**
 - [x] OpenRouter API key rate-limited or scoped
-- [ ] Integration plan written: how view-builder integrates into platform's three-layer architecture (murmur / surface / dock) ⚡
+- [x] Integration plan written: how view-builder integrates into platform's three-layer architecture (murmur / surface / dock) ⚡
+- [x] RLS enabled on `public.views`, `public.view_versions`, `public.view_drafts` — policies written and enabled (confirmed in `docs/plan-auth-wiring.md`)
 
 ---
 
 ## 2. Spec Format & Abstraction
 
-- [ ] Spec format is abstract — describes *what* to show, not *which component to render* ⚡
-- [ ] Example spec shared for review (at least 3 component types) ⚡
-- [ ] Thin mapping layer between abstract spec and current renderer
-- [ ] Spec includes `view_id`, `view_name`, and `view_type` (spatial / sequential / briefing / card / config)
-- [ ] Each component in spec has `mode` field: `static` or `dynamic`
-- [ ] Dynamic components have `trigger` field (e.g., `dock_context_change`, `agent_event`, `data_change`)
-- [ ] Spec supports `design_tokens` parameter (for source-flavored theming, future)
-- [ ] Spec format documented in repo
+- [x] Spec format is abstract — describes *what* to show, not *which component to render* ⚡
+- [x] Example spec shared for review (at least 3 component types) ⚡
+- [x] Thin mapping layer between abstract spec and current renderer
+- [x] Spec includes `view_id`, `view_name`, and `view_type` (spatial / sequential / briefing / card / config)
+- [x] Each component in spec has `mode` field: `static` or `dynamic`
+- [x] Dynamic components have `trigger` field (e.g., `dock_context_change`, `agent_event`, `data_change`)
+- [x] Spec supports `design_tokens` parameter (for source-flavored theming, future)
+- [x] Spec format documented in repo
 
 ---
 
 ## 3. Shell & Platform Integration
 
-- [ ] Three-layer architecture understood: murmur (top), surface (center), dock (bottom)
-- [ ] Generated views render on the surface layer
-- [ ] Dock functions as the Steer interface (no separate right-rail needed)
-- [ ] Shell loads saved spec on open — no AI generation call for existing views
-- [ ] Shell re-renders only dynamic components when triggers fire
-- [ ] Auth context passed to generated views (who's viewing, permissions)
+- [x] Three-layer architecture understood: murmur (top), surface (center), dock (bottom)
+- [x] Generated views render on the surface layer
+- [ ] Dock functions as the Steer interface (no separate right-rail needed) — UI + API route scaffolded, not yet connected to real agent
+- [x] Shell loads saved spec on open — no AI generation call for existing views
+- [x] Shell re-renders only dynamic components when triggers fire
+- [ ] Auth context passed to generated views (who's viewing, permissions) — `useUser()` exists, not yet threaded into `CanvasContent`
 - [ ] Action routing centralized through single endpoint
 - [ ] All actions logged in events table
+
+**Auth wiring sub-tasks** (see `docs/plan-auth-wiring.md` for full plan):
+- [x] `@supabase/ssr` installed; browser, server, and admin clients rewritten
+- [x] `middleware.ts` — redirects unauthenticated users, returns 401 for API calls
+- [x] `app/login/page.tsx` — password login (styled, uses design tokens)
+- [x] `UserProvider` + `useUser()` hook in `lib/auth/UserContext.tsx`
+- [x] `app/layout.tsx` wraps children in `UserProvider`
+- [x] `api/bootstrap` — auth-guarded, returns `userId`, `tenantId`, `role`
+- [x] `api/sources/[sourceId]/views` — auth-guarded on GET and POST
+- [x] `api/views/[viewId]/apply` — auth-guarded
+- [x] `api/sources` — auth-guarded (still returns mock data)
+- [x] `api/sources/[sourceId]/canvas` — auth-guarded (still uses mock messages)
+- [x] `api/sources/[sourceId]/canvas/refresh` — auth-guarded (still uses mock messages)
+- [x] `api/sources/[sourceId]/steer` — auth-guarded (still uses mock messages)
 
 ---
 
@@ -48,7 +63,7 @@ Check off each item when complete. Items marked ⚡ are blocking other work.
 
 - [ ] Connector abstraction interface designed ⚡
 - [ ] Action spec supports external endpoints (connector, method, payload mapping)
-- [ ] Write-back works to local database (current — done)
+- [x] Write-back works to local database
 - [ ] Write-back path designed for external systems (interface only, not implementation)
 - [ ] Source data parsing: Markdown ✓ / JSON ✓ / CSV ✓
 - [ ] Data binding validation: AI-generated field references checked against actual source fields
@@ -57,9 +72,9 @@ Check off each item when complete. Items marked ⚡ are blocking other work.
 
 ## 5. View Lifecycle
 
-- [ ] "Save this layout" action — freezes spec as default
-- [ ] Saved views load from stored spec + fresh data (no AI call)
-- [ ] "Regenerate from scratch" is explicit action, not default
+- [x] "Save this layout" action — freezes spec as default
+- [x] Saved views load from stored spec + fresh data (no AI call)
+- [x] "Regenerate from scratch" is explicit action, not default
 - [ ] Steer modifications (via dock) update saved spec
 - [ ] Version history: each spec change creates a version entry
 - [ ] Rollback: user can revert to previous version
@@ -192,29 +207,29 @@ Each skill = a SKILL.md file in the repo. Not a prompt buried in code.
 
 ## 12. Code Quality
 
-- [ ] `page.tsx` refactored into separate components
+- [x] `page.tsx` refactored into separate components
 - [ ] Tests for spec validation
 - [ ] Tests for component rendering
-- [ ] Granular commits
+- [x] Granular commits
 - [ ] No dead code in production paths
 
 ---
 
 ## 13. Documentation
 
-- [ ] PRD v2 stored in `docs/` in repo
-- [ ] Spec format documented (field definitions, required vs. optional)
+- [x] PRD v2 stored in `docs/` in repo
+- [x] Spec format documented (field definitions, required vs. optional)
 - [ ] Connector interface documented
 - [ ] Skill authoring guide: how to write a new SKILL.md
 - [ ] Component authoring guide: how to add a new primitive
-- [ ] Platform three-layer architecture documented (murmur / surface / dock) — for view-builder integration context
+- [x] Platform three-layer architecture documented (murmur / surface / dock) — for view-builder integration context
 
 ---
 
 ## 14. Source Design Tokens (Month 3+)
 
-- [ ] Token schema defined: primary color, secondary color, font family, font sizes, card radius, button style, table density
-- [ ] Components accept design tokens as parameters (not hardcoded styles) ⚡ (do this from the start)
+- [x] Token schema defined: primary color, secondary color, font family, font sizes, card radius, button style, table density
+- [x] Components accept design tokens as parameters (not hardcoded styles) ⚡
 - [ ] Default platform token set created
 - [ ] One source token set extracted from screenshot (proof of concept)
 - [ ] Token set associated with source config in Supabase
@@ -253,6 +268,7 @@ Each skill = a SKILL.md file in the repo. Not a prompt buried in code.
 
 **Gate 1 — Foundation (current):**
 Sections 1, 2, 3, 12 complete. Spec format approved. Integration plan approved. Components accept design tokens from the start.
+*Progress:* Sections 1 and 2 are complete. Section 3 is ~60% done — auth infrastructure is in, 4 API routes still need auth guards + real DB queries. Section 12 code quality items are mostly done.
 
 **Gate 2 — Core Loop:**
 Sections 4, 5, 6, 7 complete. Dock-as-Steer working. Views save and load. Actions write back.

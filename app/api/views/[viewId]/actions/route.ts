@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getSupabaseServerClient } from "../../../../lib/supabase/server";
 
 const actionSchema = z.object({
   action: z.enum(["mark_followed_up"]),
@@ -13,6 +14,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ viewId: string }> },
 ) {
+  const supabase = await getSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+
   await params;
   actionSchema.parse(await request.json());
 

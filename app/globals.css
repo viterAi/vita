@@ -84,6 +84,32 @@
   100% { background-position:  600px 0; }
 }
 
+@keyframes refresh-scan {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* Thin scan-line shown at the top of a dynamic component while it is refreshing */
+.dynamic-refreshing-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent) 40%,
+    var(--accent-tint) 55%,
+    transparent 100%
+  );
+  background-size: 300% 100%;
+  animation: refresh-scan 1.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
 @keyframes hint-fade {
   0%   { opacity: 0; transform: translateY(3px); }
   12%  { opacity: 1; transform: translateY(0); }

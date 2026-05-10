@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSupabaseAdminClient } from "../../../../../lib/supabase/admin";
+import { getSupabaseServerClient } from "../../../../../lib/supabase/server";
 
 const createViewSchema = z.object({
-  viewName: z.string().min(1),
-  viewType: z.enum(["aging_table", "follow_up_kanban"]),
-  spec: z.record(z.string(), z.unknown()),
-  isDefault: z.boolean().optional().default(false),
+  viewName: z.string().min(1).default("Default"),
+  viewType: z.string().default("spatial"),
+  spec: z.record(z.string(), z.unknown()).optional().default({}),
+  aiPages: z.array(z.unknown()).optional(),
+  isDefault: z.boolean().optional().default(true),
 });
 
 export async function GET(
@@ -14,7 +15,14 @@ export async function GET(
   { params }: { params: Promise<{ sourceId: string }> },
 ) {
   const { sourceId } = await params;
-  const supabase = getSupabaseAdminClient();
+  const supabase = await getSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from("views")
@@ -35,7 +43,18 @@ export async function POST(
 ) {
   const { sourceId } = await params;
   const body = createViewSchema.parse(await request.json());
-  const supabase = getSupabaseAdminClient();
+  const supabase = await getSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  // Resolve tenant from the authenticated user
+  const { data: tenantData } = await supabase
+    .rpc("current_tenant_id") as { data: string | null };
 
   const { data: maxSortRecord } = await supabase
     .from("views")
@@ -54,6 +73,11 @@ export async function POST(
 
   const nextSortOrder = (maxSortRecord?.sort_order ?? -1) + 1;
 
+  const spec = {
+    ...body.spec,
+    ...(body.aiPages ? { ai_pages: body.aiPages } : {}),
+  };
+
   const { data, error } = await supabase
     .from("views")
     .insert({
@@ -63,8 +87,9 @@ export async function POST(
       sort_order: nextSortOrder,
       is_default: body.isDefault,
       current_spec_version: 1,
-      spec: body.spec,
+      spec,
       ui_state: {},
+      tenant_id: tenantData ?? null,
     })
     .select("*")
     .single();

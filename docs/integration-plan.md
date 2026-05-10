@@ -244,6 +244,8 @@ The handshake payload between Mrodchi and the View Builder will not change — M
 | Auth | Handled entirely by Supabase RLS — not passed between systems | May 7 2026 |
 | Design tokens | View Builder fetches from Supabase by tenant/user — Mrodchi not involved | May 7 2026 |
 | Multi-view | Internal to View Builder; Mrodchi can query `views` table directly | May 7 2026 |
+| Mock data retained | Source data (sidebar + canvas messages) stays as mock data for now. The real L2 syntheses table doesn't have enough rows yet to generate meaningful views — only a handful of `day` and `meeting` scopes exist. Our own curated mock dataset is richer and more suitable for development and testing. Will switch to real L2 reads once synthesis volume is sufficient. | May 7 2026 |
+| Views table location | `views`, `view_versions`, `view_drafts` tables created in the vita DB (`dkccadwohifcqcdzhhnu`). All view persistence goes through the vita DB. Admin client updated to use `L0_SUPABASE_URL` + `L0_SUPABASE_ANON_KEY`. | May 7 2026 |
 
 ---
 
@@ -263,6 +265,6 @@ The handshake payload between Mrodchi and the View Builder will not change — M
 - [x] Share data flow decision with Mrodchi ✓
 - [x] Confirm View Builder reads from `l2_syntheses` directly ✓
 - [ ] Wire up Supabase L2 reads into the Next.js app (replace `/api/sources` mock layer)
-- [ ] Define abstract spec format (`lib/types/spec.ts`)
+- [x] Define abstract spec format (`lib/types/spec.ts`) — done May 7 2026; see `docs/spec-format.md`
 - [ ] Resolve remaining open questions 2–7 (next joint session)
 - [ ] Mark integration plan fully approved → unblocks spec format work and shell build

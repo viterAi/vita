@@ -1,9 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Source, SourceChannel, SourceSeedFormat } from "../types";
+import type { Source } from "../types";
 import { SourceIcon } from "./SourceIcon";
-import { CHANNEL_DOMAINS, channelLabel, sourcePreview } from "../utils";
+import { CHANNEL_DOMAINS, channelLabel } from "../utils";
+
+const LIVE_CHANNELS = new Set([
+  "whatsapp", "email", "slack",
+  "gmail", "outlook", "telegram", "facebook_messenger", "facebook",
+  "instagram", "linkedin", "twitter_x", "monday_com", "notion", "airtable",
+  "google_sheets", "excel", "hubspot", "salesforce", "zendesk", "intercom",
+  "onedrive", "google_drive", "dropbox", "sharepoint",
+]);
 
 type Props = {
   sources: Source[];
@@ -11,34 +19,12 @@ type Props = {
   setSourceId: (id: string) => void;
   expandedChannels: Set<string>;
   setExpandedChannels: React.Dispatch<React.SetStateAction<Set<string>>>;
-  createSourceOpen: boolean;
-  setCreateSourceOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  newSourceName: string;
-  setNewSourceName: (v: string) => void;
-  newSourceKey: string;
-  setNewSourceKey: (v: string) => void;
-  newSourceChannel: SourceChannel;
-  setNewSourceChannel: (v: SourceChannel) => void;
-  newSourceFormat: SourceSeedFormat;
-  setNewSourceFormat: (v: SourceSeedFormat) => void;
-  newSourceData: string;
-  setNewSourceData: (v: string) => void;
-  createSource: () => void;
-  busy: string;
-  mounted: boolean;
   width: number;
 };
 
 export function LeftSidebar({
   sources, sourceId, setSourceId,
-  expandedChannels, setExpandedChannels,
-  createSourceOpen, setCreateSourceOpen,
-  newSourceName, setNewSourceName,
-  newSourceKey, setNewSourceKey,
-  newSourceChannel, setNewSourceChannel,
-  newSourceFormat, setNewSourceFormat,
-  newSourceData, setNewSourceData,
-  createSource, busy, mounted, width,
+  expandedChannels, setExpandedChannels, width,
 }: Props) {
   const channelGroups = useMemo(() => {
     const map = new Map<string, Source[]>();
@@ -47,7 +33,12 @@ export function LeftSidebar({
       if (!map.has(ch)) map.set(ch, []);
       map.get(ch)!.push(s);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+    // Live channels first, then the rest
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      const aLive = LIVE_CHANNELS.has(a) ? 0 : 1;
+      const bLive = LIVE_CHANNELS.has(b) ? 0 : 1;
+      return aLive - bLive || a.localeCompare(b);
+    });
   }, [sources]);
 
   function toggleChannel(channel: string) {
@@ -60,77 +51,104 @@ export function LeftSidebar({
   }
 
   return (
-    <aside
-      style={{
-        width,
+    <aside style={{
+      width,
+      flexShrink: 0,
+      background: "var(--bg-surface)",
+      borderRadius: "var(--r-zone)",
+      boxShadow: "inset 0 0 0 0.5px var(--line-thin)",
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "11px 14px 10px",
+        borderBottom: "0.5px solid var(--line-thin)",
+        fontSize: 11,
+        fontWeight: 600,
+        color: "var(--ink-tertiary)",
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
         flexShrink: 0,
-        background: "var(--bg-surface)",
-        borderRadius: "var(--r-zone)",
-        boxShadow: "inset 0 0 0 0.5px var(--line-thin)",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <div style={{ padding: "14px 12px", borderBottom: "0.5px solid var(--line-thin)", fontSize: 14, fontWeight: 600 }}>
-        viter
+      }}>
+        Sources
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 0 8px" }}>
         {channelGroups.map(([channel, channelSources]) => {
           const isExpanded = expandedChannels.has(channel);
           const hasActive = channelSources.some((s) => s.id === sourceId);
+          const isLive = LIVE_CHANNELS.has(channel);
+
           return (
             <div key={channel}>
               <button
-                onClick={() => toggleChannel(channel)}
-                className="btn-ghost"
+                onClick={() => isLive && toggleChannel(channel)}
+                className={isLive ? "btn-ghost" : undefined}
                 style={{
                   all: "unset",
-                  cursor: "pointer",
+                  cursor: isLive ? "pointer" : "default",
                   display: "flex",
                   alignItems: "center",
-                  gap: 6,
+                  gap: 7,
                   width: "100%",
-                  padding: "5px 10px",
+                  padding: "5px 12px",
                   boxSizing: "border-box",
                   borderRadius: 4,
+                  opacity: isLive ? 1 : 0.4,
                 }}
               >
-                <span style={{ fontSize: 10, color: "var(--ink-tertiary)", transition: "transform 0.15s", display: "inline-block", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+                <span style={{
+                  fontSize: 9, color: "var(--ink-tertiary)",
+                  display: "inline-block",
+                  transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                  transition: "transform 0.15s",
+                  visibility: isLive ? "visible" : "hidden",
+                }}>▶</span>
                 <SourceIcon name={channelLabel(channel)} keyStr={channel} domain={CHANNEL_DOMAINS[channel]} />
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: hasActive ? "var(--accent)" : "var(--ink-primary)" }}>
+                <span style={{
+                  flex: 1, fontSize: 12, fontWeight: 500,
+                  color: hasActive ? "var(--accent)" : "var(--ink-primary)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
                   {channelLabel(channel)}
                 </span>
-                <span style={{ fontSize: 11, color: "var(--ink-tertiary)", background: "var(--bg-secondary)", borderRadius: 8, padding: "1px 6px" }}>
-                  {channelSources.length}
-                </span>
+                {!isLive && (
+                  <span style={{ fontSize: 9, color: "var(--ink-quaternary, var(--ink-tertiary))", letterSpacing: "0.03em" }}>soon</span>
+                )}
+                {isLive && (
+                  <span style={{ fontSize: 10, color: "var(--ink-tertiary)", background: "var(--bg-secondary)", borderRadius: 8, padding: "1px 5px" }}>
+                    {channelSources.length}
+                  </span>
+                )}
               </button>
 
-              {isExpanded && (
-                <div style={{ marginBottom: 6 }}>
+              {isExpanded && isLive && (
+                <div style={{ paddingBottom: 4 }}>
                   {channelSources.map((s) => {
                     const active = s.id === sourceId;
-                    const { rowCount, excerpt } = sourcePreview(s);
                     return (
                       <button
                         key={s.id}
                         onClick={() => setSourceId(s.id)}
+                        className={active ? undefined : "btn-ghost"}
                         style={{
                           all: "unset",
                           cursor: "pointer",
                           display: "block",
                           width: "100%",
                           boxSizing: "border-box",
-                          padding: "5px 8px 5px 16px",
+                          padding: "5px 12px 5px 28px",
                           borderRadius: 4,
                           background: active ? "var(--accent-tint)" : "transparent",
                         }}
                       >
-                        <div style={{ fontSize: 13, fontWeight: active ? 500 : 400, color: active ? "var(--accent)" : "var(--ink-primary)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div style={{
+                          fontSize: 12, fontWeight: active ? 500 : 400,
+                          color: active ? "var(--accent)" : "var(--ink-primary)",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
                           {s.name}
-                        </div>
-                        <div style={{ fontSize: 11, color: active ? "var(--accent)" : "var(--ink-tertiary)", marginTop: 1, opacity: 0.8 }}>
-                          {rowCount !== null ? `${rowCount} rows` : excerpt}
                         </div>
                       </button>
                     );
@@ -140,71 +158,6 @@ export function LeftSidebar({
             </div>
           );
         })}
-      </div>
-
-      <div style={{ marginTop: "auto", padding: 10, borderTop: "0.5px solid var(--line-thin)" }}>
-        <button
-          onClick={() => setCreateSourceOpen((open) => !open)}
-          suppressHydrationWarning
-          className="btn-outline"
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            fontSize: 11,
-            padding: "6px 8px",
-            borderRadius: 4,
-            boxShadow: "inset 0 0 0 0.5px var(--line-strong)",
-            color: "var(--ink-secondary)",
-            display: "inline-block",
-          }}
-        >
-          {mounted ? (createSourceOpen ? "Close source form" : "Create source") : "Create source"}
-        </button>
-
-        {mounted && createSourceOpen ? (
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-            {[
-              { value: newSourceName, setter: setNewSourceName, placeholder: "Source name" },
-              { value: newSourceKey, setter: setNewSourceKey, placeholder: "source_key" },
-              { value: newSourceChannel, setter: setNewSourceChannel, placeholder: "channel (e.g. gmail, slack…)" },
-            ].map(({ value, setter, placeholder }) => (
-              <input
-                key={placeholder}
-                value={value}
-                onChange={(e) => setter(e.target.value)}
-                placeholder={placeholder}
-                style={{ border: "0.5px solid var(--line-thin)", borderRadius: 4, background: "var(--bg-surface)", color: "var(--ink-primary)", padding: "6px 8px", fontSize: 11 }}
-              />
-            ))}
-            <select
-              value={newSourceFormat}
-              onChange={(e) => setNewSourceFormat(e.target.value as SourceSeedFormat)}
-              style={{ border: "0.5px solid var(--line-thin)", borderRadius: 4, background: "var(--bg-surface)", color: "var(--ink-primary)", padding: "6px 8px", fontSize: 11 }}
-            >
-              <option value="markdown">markdown</option>
-              <option value="json">json</option>
-              <option value="csv">csv</option>
-            </select>
-            <textarea
-              value={newSourceData}
-              onChange={(e) => setNewSourceData(e.target.value)}
-              placeholder="Paste source payload (markdown/json/csv)"
-              rows={5}
-              style={{ border: "0.5px solid var(--line-thin)", borderRadius: 4, background: "var(--bg-surface)", color: "var(--ink-primary)", padding: "6px 8px", fontSize: 11, resize: "vertical" }}
-            />
-            <button
-              onClick={createSource}
-              className="btn-solid"
-              style={{ all: "unset", cursor: "pointer", fontSize: 11, padding: "6px 8px", borderRadius: 4, background: "var(--ink-primary)", color: "white", textAlign: "center" }}
-            >
-              Save source
-            </button>
-          </div>
-        ) : null}
-
-        <div style={{ marginTop: 8, fontSize: 11, color: "var(--ink-tertiary)" }}>
-          Live data only
-        </div>
       </div>
     </aside>
   );

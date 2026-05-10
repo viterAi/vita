@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { TokenProvider } from "@/lib/design/TokenProvider";
+import { UserProvider } from "@/lib/auth/UserContext";
 
 export const metadata: Metadata = {
-  title: "Autonomous View Builder",
-  description: "Shell-first v1 scaffold with Supabase persistence.",
+  title: "vita",
+  description: "Autonomous view builder — generate and manage views from any source.",
 };
 
 export default function RootLayout({
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <TokenProvider>{children}</TokenProvider>
+        <TokenProvider>
+          <UserProvider>{children}</UserProvider>
+        </TokenProvider>
       </body>
     </html>
   );

@@ -46,11 +46,23 @@ export type UiColumn = {
   kind: "string" | "number" | "date";
 };
 
+export type ComponentMode = "static" | "dynamic";
+export type ComponentTrigger = "dock_context_change" | "agent_event" | "data_change";
+
+export type AiComponent = {
+  component_id: string;
+  props?: Record<string, unknown>;
+  /** Whether this component re-evaluates when a trigger fires. Defaults to "static". */
+  mode?: ComponentMode;
+  /** Which event causes this dynamic component to re-evaluate. */
+  trigger?: ComponentTrigger;
+};
+
 export type AiPage = {
   id: string;
   title: string;
   description?: string;
-  components: Array<{ component_id: string; props?: Record<string, unknown> }>;
+  components: AiComponent[];
 };
 
 export type AiPageStatus = {

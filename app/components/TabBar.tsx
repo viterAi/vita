@@ -15,18 +15,89 @@ type Props = {
   applyDraft: () => void;
   busy: string;
   sourceName: string;
+  generating: boolean;
+  isSaved: boolean;
+  isSavingLayout: boolean;
+  isRefreshingContent: boolean;
+  /** True when the active page contains at least one dynamic component. */
+  hasDynamic: boolean;
+  onSaveLayout: () => void;
+  onRegenerate: () => void;
+  /** Fire a data_change trigger — refreshes dynamic components without rebuilding the layout. */
+  onRefreshData: () => void;
 };
 
 export function TabBar({
   aiPages, activeAiPageId, setActiveAiPageId, aiPageStatuses,
   views, activeViewId, setActiveViewId,
   pendingDraft, activeView, applyDraft, busy, sourceName,
+  generating, isSaved, isSavingLayout, isRefreshingContent, hasDynamic,
+  onSaveLayout, onRegenerate, onRefreshData,
 }: Props) {
+  // Only show save/regenerate after generation fully completes
+  const pagesReady = !generating && aiPages.length > 0;
+
   return (
     <div style={{ borderBottom: "0.5px solid var(--line-thin)" }}>
-      <div style={{ padding: "18px 24px 14px", display: "flex", alignItems: "baseline", gap: 10 }}>
-        <div style={{ fontSize: 19, fontWeight: 500 }}>{sourceName}</div>
-        {aiPages.length > 0 && (
+      <div style={{ padding: "18px 24px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ fontSize: 19, fontWeight: 500, flex: 1 }}>{sourceName}</div>
+
+        {isRefreshingContent && !generating && (
+          <div style={{ fontSize: 11, color: "var(--ink-tertiary)", display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", animation: "pulse-dot 1.4s ease-in-out infinite" }} />
+            Refreshing…
+          </div>
+        )}
+
+        {pagesReady && isSaved && !isRefreshingContent && (
+          <div style={{ fontSize: 11, color: "var(--ink-tertiary)", display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "var(--good)" }}>✓</span>
+            <span>Saved</span>
+          </div>
+        )}
+
+        {pagesReady && !isSaved && (
+          <button
+            onClick={onSaveLayout}
+            disabled={isSavingLayout}
+            style={{ all: "unset", cursor: "pointer", fontSize: 11, padding: "5px 11px", borderRadius: 5, background: "var(--accent)", color: "#fff", fontWeight: 600, opacity: isSavingLayout ? 0.6 : 1 }}
+          >
+            {isSavingLayout ? "Saving…" : "Save layout"}
+          </button>
+        )}
+
+        {pagesReady && isSaved && hasDynamic && !isRefreshingContent && (
+          <button
+            onClick={onRefreshData}
+            disabled={!!busy}
+            title="Re-fetch content for dynamic components (data_change trigger)"
+            style={{
+              all: "unset", cursor: "pointer",
+              fontSize: 11, padding: "5px 11px", borderRadius: 5,
+              boxShadow: "inset 0 0 0 1px var(--line-strong)",
+              color: "var(--ink-secondary)", fontWeight: 500,
+              display: "flex", alignItems: "center", gap: 5,
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M8.5 5A3.5 3.5 0 1 1 5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              <path d="M5 1.5L6.5 3 5 1.5 3.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Refresh data
+          </button>
+        )}
+
+        {pagesReady && isSaved && (
+          <button
+            onClick={onRegenerate}
+            disabled={!!busy}
+            style={{ all: "unset", cursor: "pointer", fontSize: 11, padding: "5px 11px", borderRadius: 5, boxShadow: "inset 0 0 0 1px var(--line-strong)", color: "var(--ink-secondary)", fontWeight: 500 }}
+          >
+            Regenerate
+          </button>
+        )}
+
+        {pagesReady && (
           <div style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-tint)", borderRadius: 20, padding: "2px 8px", letterSpacing: "0.02em" }}>
             {aiPages.length} {aiPages.length === 1 ? "page" : "pages"}
           </div>

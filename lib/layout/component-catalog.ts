@@ -129,6 +129,21 @@ export const COMPONENT_CATALOG: CatalogComponent[] = [
     sample: { title: "Actions", actions: ["mark_followed_up"] },
   },
   {
+    id: "chart_gantt",
+    description: "Gantt timeline chart with clickable task bars. Each bar shows start/end dates and status. PREFER using title_field/start_field/end_field/status_field to map real row data. Use the static 'tasks' array only when the source has no date columns.",
+    slots: [],
+    allowed_props: ["title", "tasks", "title_field", "start_field", "end_field", "status_field", "max_items"],
+    required_data_fields: [],
+    sample: {
+      title: "Project Timeline",
+      title_field: "task_name",
+      start_field: "start_date",
+      end_field: "due_date",
+      status_field: "status",
+      max_items: 20,
+    },
+  },
+  {
     id: "empty_state",
     description: "Placeholder when no data or no layout.",
     slots: [],

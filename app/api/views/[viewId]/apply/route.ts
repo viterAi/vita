@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getSupabaseAdminClient } from "../../../../../lib/supabase/admin";
+import { getSupabaseServerClient } from "../../../../../lib/supabase/server";
 import { ensureSpecQuality } from "../../../../../lib/view/spec-quality";
 import type { PersistedViewSpec } from "../../../../../lib/types/view-builder";
 
@@ -16,7 +16,14 @@ export async function POST(
 ) {
   const { viewId } = await params;
   const body = applySchema.parse(await request.json());
-  const supabase = getSupabaseAdminClient();
+  const supabase = await getSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
 
   const { data: existingView, error: fetchError } = await supabase
     .from("views")
@@ -33,6 +40,7 @@ export async function POST(
 
   let specToApply = body.spec as PersistedViewSpec | undefined;
   let draftSourceFingerprint: string | null = null;
+
   if (body.draftId) {
     const { data: draft, error: draftError } = await supabase
       .from("view_drafts")
@@ -60,7 +68,6 @@ export async function POST(
   }
 
   const qualityCheckedSpec = ensureSpecQuality(specToApply);
-
   const nextVersion = existingView.current_spec_version + 1;
 
   const { error: versionError } = await supabase.from("view_versions").insert({

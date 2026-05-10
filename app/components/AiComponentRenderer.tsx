@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { Row, UiColumn } from "../types";
+import { useState, useCallback } from "react";
+import type { AiComponent, Row, UiColumn } from "../types";
 import { eur } from "../utils";
 
 type GanttTask = {
@@ -35,23 +35,56 @@ function fmtGanttDate(ts: number) {
   return `${d.toLocaleString("default", { month: "short" })} ${d.getDate()}`;
 }
 
-function GanttChart({ title, tasks, cardStyle }: { title: string; tasks: GanttTask[]; cardStyle: React.CSSProperties }) {
+function GanttChart({
+  title, tasks, cardStyle, rows,
+  titleField, startField, endField, statusField, maxItems,
+  onAgentAction,
+}: {
+  title: string;
+  tasks: GanttTask[];
+  cardStyle: React.CSSProperties;
+  rows?: Row[];
+  titleField?: string;
+  startField?: string;
+  endField?: string;
+  statusField?: string;
+  maxItems?: number;
+  onAgentAction?: (message?: string) => void;
+}) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [cmdInput, setCmdInput] = useState("");
+  const [cmdFocused, setCmdFocused] = useState(false);
 
-  const parsed = tasks
+  // Derive tasks from real row data when field mappings are provided and static tasks are empty
+  const effectiveTasks: GanttTask[] = (() => {
+    if (tasks.length > 0) return tasks;
+    if (!rows || rows.length === 0 || !startField || !endField) return [];
+    const limit = maxItems ?? 30;
+    return rows.slice(0, limit).map((r) => ({
+      title: titleField ? String(r[titleField] ?? "Task") : "Task",
+      start: startField ? String(r[startField] ?? "") : "",
+      end: endField ? String(r[endField] ?? "") : "",
+      status: statusField ? String(r[statusField] ?? "") : "",
+    }));
+  })();
+
+  const parsed = effectiveTasks
     .map((t) => ({
       title: String(t.title ?? t.name ?? t.label ?? "Task"),
       start: t.start ? Date.parse(t.start) : NaN,
       end: t.end ? Date.parse(t.end) : NaN,
       status: String(t.status ?? ""),
     }))
-    .filter((t) => !isNaN(t.start) && !isNaN(t.end));
+    .filter((t) => !isNaN(t.start) && !isNaN(t.end) && t.end >= t.start);
 
   if (parsed.length === 0) {
+    const hint = (!startField && tasks.length === 0)
+      ? "Set start_field and end_field in the spec to map date columns from your data."
+      : "No rows with valid start and end dates found.";
     return (
       <div style={cardStyle}>
         <div style={{ fontSize: 11, color: "var(--ink-tertiary)", marginBottom: 8 }}>{title}</div>
-        <div style={{ fontSize: 12, color: "var(--ink-tertiary)" }}>No task data available.</div>
+        <div style={{ fontSize: 12, color: "var(--ink-tertiary)" }}>{hint}</div>
       </div>
     );
   }
@@ -135,25 +168,142 @@ function GanttChart({ title, tasks, cardStyle }: { title: string; tasks: GanttTa
           ))}
         </div>
       ) : null}
+
+      {/* Inline command bar */}
+      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          borderRadius: 6,
+          border: `1px solid ${cmdFocused ? "var(--accent)" : "var(--line-thin)"}`,
+          background: "var(--bg-surface)",
+          transition: "border-color 0.15s",
+          overflow: "hidden",
+        }}>
+          <svg style={{ flexShrink: 0, margin: "0 7px", opacity: 0.4 }} width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <circle cx="4.5" cy="4.5" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M7.5 7.5L10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          <input
+            value={cmdInput}
+            onChange={(e) => setCmdInput(e.target.value)}
+            onFocus={() => setCmdFocused(true)}
+            onBlur={() => setCmdFocused(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && cmdInput.trim()) {
+                e.preventDefault();
+                onAgentAction?.(cmdInput.trim());
+                setCmdInput("");
+              }
+              if (e.key === "Escape") {
+                setCmdInput("");
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="Ask to filter, change dates, or load data…"
+            style={{
+              flex: 1, fontSize: 11, padding: "7px 8px 7px 0",
+              border: "none", background: "transparent",
+              color: "var(--ink-primary)", outline: "none", minWidth: 0,
+            }}
+          />
+        </div>
+        {cmdInput.trim() && (
+          <button
+            onClick={() => { onAgentAction?.(cmdInput.trim()); setCmdInput(""); }}
+            style={{
+              all: "unset", cursor: "pointer",
+              fontSize: 11, padding: "6px 10px", borderRadius: 6,
+              background: "var(--accent)", color: "#fff",
+              flexShrink: 0, transition: "opacity 0.12s",
+            }}
+          >
+            Ask
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-type ComponentNode = { component_id: string; props?: Record<string, unknown> };
+function FilterBar({ card, title, fields, onAgentAction }: {
+  card: React.CSSProperties;
+  title: string;
+  fields: unknown[];
+  onAgentAction?: (message?: string) => void;
+}) {
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
-export function AiComponentRenderer({
+  const toggle = useCallback((idx: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+        onAgentAction?.();
+      }
+      return next;
+    });
+  }, [onAgentAction]);
+
+  return (
+    <div style={{ ...card, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 11, color: "var(--ink-tertiary)", flexShrink: 0 }}>{title}</span>
+      {fields.map((f, fi) => {
+        const label = typeof f === "object" && f !== null
+          ? String((f as Record<string, unknown>).label ?? (f as Record<string, unknown>).name ?? JSON.stringify(f))
+          : String(f);
+        const isOn = selected.has(fi);
+        return (
+          <button
+            key={fi}
+            onClick={() => toggle(fi)}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              fontSize: 11,
+              borderRadius: 12,
+              padding: "3px 10px",
+              background: isOn ? "var(--accent)" : "var(--bg-surface)",
+              color: isOn ? "#fff" : "var(--ink-secondary)",
+              border: isOn ? "0.5px solid var(--accent)" : "0.5px solid var(--line-thin)",
+              transition: "background 0.15s, color 0.15s, border-color 0.15s",
+              fontWeight: isOn ? 600 : 400,
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+      {fields.length === 0 && <span style={{ fontSize: 11, color: "var(--ink-tertiary)" }}>No filters defined.</span>}
+    </div>
+  );
+}
+
+interface AiComponentRendererProps {
+  component: AiComponent;
+  index: number;
+  rows: Row[];
+  activeColumns: UiColumn[];
+  attentionRows: Row[];
+  isRefreshing?: boolean;
+  onAgentAction?: (message?: string) => void;
+}
+
+/**
+ * Inner rendering logic — no knowledge of the refresh state.
+ * Static components are rendered here and never receive the scan-line overlay.
+ */
+function AiComponentBody({
   component,
   index,
   rows,
   activeColumns,
   attentionRows,
-}: {
-  component: ComponentNode;
-  index: number;
-  rows: Row[];
-  activeColumns: UiColumn[];
-  attentionRows: Row[];
-}) {
+  onAgentAction,
+}: Omit<AiComponentRendererProps, "isRefreshing">) {
   const cid = component.component_id;
   const props = component.props ?? {};
   const k = `${cid}-${index}`;
@@ -228,20 +378,33 @@ export function AiComponentRenderer({
   if (cid === "filter_bar") {
     const fields: unknown[] = Array.isArray(props.fields) ? props.fields : [];
     return (
-      <div key={k} style={{ ...card, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, color: "var(--ink-tertiary)" }}>{String(props.title ?? "Filters")}</span>
-        {fields.map((f, fi) => {
-          const label = typeof f === "object" && f !== null ? String((f as Record<string, unknown>).label ?? (f as Record<string, unknown>).name ?? JSON.stringify(f)) : String(f);
-          return <span key={fi} style={{ fontSize: 11, background: "var(--bg-surface)", border: "0.5px solid var(--line-thin)", borderRadius: 12, padding: "3px 10px", color: "var(--ink-secondary)" }}>{label}</span>;
-        })}
-        {fields.length === 0 && <span style={{ fontSize: 11, color: "var(--ink-tertiary)" }}>No filters defined.</span>}
-      </div>
+      <FilterBar
+        key={k}
+        card={card}
+        title={String(props.title ?? "Filters")}
+        fields={fields}
+        onAgentAction={onAgentAction}
+      />
     );
   }
 
   if (cid === "chart_gantt") {
     const tasks = Array.isArray(props.tasks) ? (props.tasks as GanttTask[]) : [];
-    return <GanttChart key={k} title={String(props.title ?? "Timeline")} tasks={tasks} cardStyle={card} />;
+    return (
+      <GanttChart
+        key={k}
+        title={String(props.title ?? "Timeline")}
+        tasks={tasks}
+        cardStyle={card}
+        rows={rows}
+        titleField={props.title_field ? String(props.title_field) : undefined}
+        startField={props.start_field ? String(props.start_field) : undefined}
+        endField={props.end_field ? String(props.end_field) : undefined}
+        statusField={props.status_field ? String(props.status_field) : undefined}
+        maxItems={props.max_items ? Number(props.max_items) : undefined}
+        onAgentAction={onAgentAction}
+      />
+    );
   }
 
   if (cid === "chart_bar") {
@@ -464,7 +627,13 @@ export function AiComponentRenderer({
           {actions.map((a, ai) => {
             const label = typeof a === "object" && a !== null ? String((a as Record<string, unknown>).label ?? (a as Record<string, unknown>).name ?? JSON.stringify(a)) : String(a);
             return (
-              <button key={ai} style={{ all: "unset", cursor: "pointer", fontSize: 12, padding: "6px 12px", borderRadius: 4, boxShadow: "inset 0 0 0 0.5px var(--line-strong)", color: "var(--ink-secondary)" }}>
+              <button
+                key={ai}
+                onClick={() => onAgentAction?.()}
+                style={{ all: "unset", cursor: "pointer", fontSize: 12, padding: "6px 12px", borderRadius: 4, boxShadow: "inset 0 0 0 0.5px var(--line-strong)", color: "var(--ink-secondary)", transition: "background 0.12s, color 0.12s" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-tertiary, var(--bg-secondary))"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = ""; }}
+              >
                 {label}
               </button>
             );
@@ -527,6 +696,28 @@ export function AiComponentRenderer({
   return (
     <div key={k} style={{ background: "var(--bg-secondary)", borderRadius: "var(--r-card)", padding: 12, fontSize: 12, color: "var(--ink-tertiary)", fontStyle: "italic" }}>
       [{cid}]
+    </div>
+  );
+}
+
+/**
+ * Public component.
+ *
+ * When `isRefreshing=true` (dynamic component whose trigger has fired):
+ *   - a scan-line overlay appears at the top of the component
+ *   - static components always render without the overlay
+ *
+ * The wrapper div uses `position: relative` so the absolutely-positioned scan-line
+ * clips correctly against the component bounding box without affecting layout.
+ */
+export function AiComponentRenderer({
+  isRefreshing = false,
+  ...rest
+}: AiComponentRendererProps) {
+  return (
+    <div style={{ position: "relative" }}>
+      {isRefreshing && <div className="dynamic-refreshing-bar" />}
+      <AiComponentBody {...rest} />
     </div>
   );
 }
