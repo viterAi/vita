@@ -8,6 +8,7 @@ import { TabBar } from "./components/TabBar";
 import { Dock } from "./components/Dock";
 import { CanvasContent } from "./components/CanvasContent";
 import { CornJobsCanvas } from "./components/CornJobsCanvas";
+import { useUser } from "@/lib/auth/UserContext";
 import { useResizablePanels } from "./hooks/useResizablePanels";
 import { useSources } from "./hooks/useSources";
 import { useCanvas } from "./hooks/useCanvas";
@@ -18,6 +19,7 @@ const dragPip: React.CSSProperties = {
 };
 
 export default function HomePage() {
+  const { user, loading: authLoading } = useUser();
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [cornJobsPage, setCornJobsPage] = useState(false);
@@ -28,8 +30,14 @@ export default function HomePage() {
 
   useEffect(() => {
     setMounted(true);
-    src.fetchSources().finally(() => setLoading(false));
   }, []);
+
+  // Refetch sidebar + channel selection whenever the signed-in user changes (not only on first mount).
+  useEffect(() => {
+    if (authLoading || !user?.id) return;
+    setLoading(true);
+    src.fetchSources().finally(() => setLoading(false));
+  }, [authLoading, user?.id, src.fetchSources]);
 
   useEffect(() => {
     if (src.sourceId) void canvas.loadOrGenerate(src.sourceId);

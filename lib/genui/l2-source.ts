@@ -1,9 +1,10 @@
 /**
  * Helpers for sourcing UI data from the `genui_channels` + `genui_l2` tables.
  *
- * All reads happen through the SSR Supabase client so RLS (tenant + visibility
- * + ownership) enforces per-user scoping automatically. We never pass
- * `tenant_id` manually — Postgres does it.
+ * All reads happen through the SSR Supabase client so RLS enforces access:
+ * channels are visible to their **connected user** (or tenant admins); L2 rows
+ * use visibility + `created_by` (see `genui_l2` policies). We never pass
+ * `tenant_id` manually for reads — Postgres applies policies from `auth.uid()`.
  *
  * Two key formats exist:
  *   • Channel key  — `<source>:<external_key>` (e.g. `gmail:yy@upvlu.com`).

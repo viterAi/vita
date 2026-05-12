@@ -17,14 +17,10 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const tenantId = await resolveTenantIdForUser(user.id);
-  if (!tenantId) return NextResponse.json({ error: "no_tenant" }, { status: 403 });
-
-  const admin = getSupabaseAdminClient();
-  const { data: channels, error } = await admin
+  // RLS on `genui_channels` limits rows to this user (or tenant admins — see migration).
+  const { data: channels, error } = await supabase
     .from("genui_channels")
     .select("id, source, external_key, display_name, agent_prompt, created_at")
-    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -91,6 +87,7 @@ export async function POST(req: Request) {
     .from("genui_channels")
     .insert({
       tenant_id: tenantId,
+      connected_by_user_id: user.id,
       source,
       external_key: email,
       display_name: email,
@@ -134,31 +131,21 @@ async function handleGitHub({
     return NextResponse.json({ error: "Repository must look like owner/repo." }, { status: 400 });
   }
 
-  let webhookSecret = String(body.webhook_secret ?? "");
+  let webhookSecret = String(body.webhook_secret ?? "").trim();
   let autoInstalled = false;
   let installError: string | null = null;
 
-  // Try auto-install via Arcade Auth token
-  if (body.auth_id && process.env.ARCADE_API_KEY) {
-    const installResult = await installGitHubWebhook({ authId: body.auth_id, repo, tenantId, userId: user.id });
-    if (installResult.ok) {
-      webhookSecret = installResult.secret;
-      autoInstalled = true;
-    } else {
-      installError = installResult.error;
-      console.warn("[channels/POST] GitHub webhook auto-install failed:", installResult.error);
-    }
+  const wantsAuto = Boolean(body.auth_id && process.env.ARCADE_API_KEY);
+  if (wantsAuto && webhookSecret.length < 8) {
+    webhookSecret = randomBytes(20).toString("hex");
   }
 
-  if (!autoInstalled && webhookSecret.length < 8) {
-    // No auto-install + no manual secret → surface the real reason so the UI
-    // can guide the user (manual install + secret, or fix SSO/permissions).
-    const detail = installError ?? "No auth_id was supplied and no manual webhook secret was provided.";
+  if (!wantsAuto && webhookSecret.length < 8) {
     return NextResponse.json(
       {
-        error: `Could not install webhook automatically. ${detail}`,
+        error:
+          "Provide a webhook signing secret (8+ characters) from GitHub repo → Settings → Webhooks, or complete Arcade GitHub auth for auto-install.",
         code: "webhook_install_failed",
-        install_error: installError,
       },
       { status: 400 },
     );
@@ -168,6 +155,7 @@ async function handleGitHub({
     .from("genui_channels")
     .insert({
       tenant_id: tenantId,
+      connected_by_user_id: user.id,
       source: "github",
       external_key: repo,
       display_name: repo,
@@ -177,22 +165,66 @@ async function handleGitHub({
     .single();
 
   if (insErr?.code === "23505") {
-    return NextResponse.json({ error: "That repo is already connected. Remove it first." }, { status: 409 });
+    return NextResponse.json(
+      { error: "That repo is already connected for your account. Remove it first." },
+      { status: 409 },
+    );
   }
   if (insErr || !inserted) {
     return NextResponse.json({ error: insErr?.message ?? "insert failed" }, { status: 500 });
   }
 
+  const channelId = inserted.id as string;
+
   const { error: secErr } = await admin.from("genui_channel_secrets").insert({
-    genui_channel_id: inserted.id as string,
+    genui_channel_id: channelId,
     github_webhook_secret: webhookSecret,
   });
   if (secErr) {
-    await admin.from("genui_channels").delete().eq("id", inserted.id);
+    await admin.from("genui_channels").delete().eq("id", channelId);
     return NextResponse.json({ error: secErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, id: inserted.id, auto_installed: autoInstalled });
+  if (wantsAuto) {
+    const installResult = await installGitHubWebhook({
+      authId: body.auth_id!,
+      repo,
+      tenantId,
+      userId: user.id,
+      channelId,
+      secret: webhookSecret,
+    });
+    if (installResult.ok) {
+      autoInstalled = true;
+    } else {
+      installError = installResult.error;
+      console.warn("[channels/POST] GitHub webhook auto-install failed:", installResult.error);
+      await admin.from("genui_channel_secrets").delete().eq("genui_channel_id", channelId);
+      await admin.from("genui_channels").delete().eq("id", channelId);
+      return NextResponse.json(
+        {
+          error: `Could not install webhook automatically. ${installResult.error}`,
+          code: "webhook_install_failed",
+          install_error: installResult.error,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    id: channelId,
+    auto_installed: autoInstalled,
+    webhook_url_hint: buildGenuiWebhookUrl(tenantId, channelId),
+  });
+}
+
+function buildGenuiWebhookUrl(tenantId: string, channelId: string): string {
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  const webhookBaseUrl = process.env.GENUI_ARCADE_WEBHOOK_URL ?? `${appUrl}/api/integrations/github/genui`;
+  const sep = webhookBaseUrl.includes("?") ? "&" : "?";
+  return `${webhookBaseUrl}${sep}t=${tenantId}&c=${channelId}`;
 }
 
 async function installGitHubWebhook({
@@ -200,12 +232,16 @@ async function installGitHubWebhook({
   repo,
   tenantId,
   userId,
+  channelId,
+  secret,
 }: {
   authId: string;
   repo: string;
   tenantId: string;
   userId: string;
-}): Promise<{ ok: true; secret: string } | { ok: false; error: string }> {
+  channelId: string;
+  secret: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const client = new Arcade({ apiKey: process.env.ARCADE_API_KEY! });
     const authStatus = await client.auth.status({ id: authId });
@@ -214,15 +250,10 @@ async function installGitHubWebhook({
       return { ok: false, error: "Arcade auth not completed" };
     }
 
-    void userId; // reserved for future per-user token lookup
+    void userId;
 
     const token = authStatus.context.token;
-    const secret = randomBytes(20).toString("hex");
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-    const webhookBaseUrl = process.env.GENUI_ARCADE_WEBHOOK_URL ?? `${appUrl}/api/integrations/github/genui`;
-    const webhookUrl = webhookBaseUrl.includes("?")
-      ? `${webhookBaseUrl}&t=${tenantId}`
-      : `${webhookBaseUrl}?t=${tenantId}`;
+    const webhookUrl = buildGenuiWebhookUrl(tenantId, channelId);
 
     // GitHub won't accept hooks pointing at a private/loopback URL. Catch this
     // before the API call so the user sees a clear message instead of a
@@ -292,7 +323,7 @@ async function installGitHubWebhook({
       return { ok: false, error: `GitHub API ${ghRes.status}: ${ghMessage}` };
     }
 
-    return { ok: true, secret };
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

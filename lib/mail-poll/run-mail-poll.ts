@@ -1,5 +1,4 @@
 import { Arcade } from "@arcadeai/arcadejs";
-import { resolveGenuiL2Writer, type GenuiL2Writer } from "@/lib/genui/l2-writer";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { ensureKindGrouping } from "@/lib/genui/kind-grouping";
 
@@ -23,6 +22,7 @@ type Channel = {
   external_key: string;
   agent_prompt: string;
   arcade_auth_user_id: string;
+  connected_by_user_id: string;
   last_polled_at: string | null;
 };
 
@@ -58,16 +58,10 @@ export async function runMailPoll(): Promise<MailPollRunResult> {
 
   const arcade = new Arcade({ apiKey: process.env.ARCADE_API_KEY });
   const db = getSupabaseAdminClient();
-  const l2Writer = await resolveGenuiL2Writer();
-  if (!l2Writer) {
-    console.warn(
-      "[mail-poll] No genUI L2 writer: set GENUI_L2_ATTRIBUTED_USER_ID (auth.users UUID, member of each polled tenant) for service-role inserts, or GENUI_L2_MACHINE_EMAIL/PASSWORD + L0 anon URL for JWT inserts",
-    );
-  }
 
   const { data: channels, error: chErr } = await db
     .from("genui_channels")
-    .select("id, tenant_id, source, external_key, agent_prompt, arcade_auth_user_id, last_polled_at")
+    .select("id, tenant_id, source, external_key, agent_prompt, arcade_auth_user_id, connected_by_user_id, last_polled_at")
     .in("source", ["gmail", "outlook"])
     .not("arcade_auth_user_id", "is", null);
 
@@ -80,7 +74,7 @@ export async function runMailPoll(): Promise<MailPollRunResult> {
 
   for (const ch of (channels ?? []) as Channel[]) {
     try {
-      const r = await processChannel(ch, arcade, db, l2Writer);
+      const r = await processChannel(ch, arcade, db);
       results.push(r);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -96,7 +90,6 @@ async function processChannel(
   ch: Channel,
   arcade: Arcade,
   db: ReturnType<typeof getSupabaseAdminClient>,
-  l2Writer: GenuiL2Writer | null,
 ): Promise<MailPollChannelResult> {
   const provider = ch.source === "gmail" ? "google" : "microsoft";
   const scopes =
@@ -130,29 +123,18 @@ async function processChannel(
     }
 
     const externalId = msg.id;
-    if (!l2Writer) {
-      skipped++;
-      continue;
-    }
 
-    const baseRow = {
+    const { error: insErr } = await db.from("genui_l2").insert({
       tenant_id: ch.tenant_id,
       genui_channel_id: ch.id,
       external_event_id: externalId,
       ingest_kind: ch.source === "gmail" ? "gmail_poll" : "outlook_poll",
       generator: "openrouter_ai",
       payload,
-      visibility: "tenant" as const,
+      visibility: "private",
+      created_by: ch.connected_by_user_id,
       updated_at: new Date().toISOString(),
-    };
-
-    const { error: insErr } =
-      l2Writer.mode === "service_role"
-        ? await l2Writer.client.from("genui_l2").insert({
-            ...baseRow,
-            created_by: l2Writer.attributedUserId,
-          })
-        : await l2Writer.client.from("genui_l2").insert(baseRow);
+    });
 
     if (insErr?.code === "23505") {
       skipped++;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { Source, SourceChannel, SourceSeedFormat, SourceTreeNode } from "../types";
 
 const LS_SOURCE_ID = "gui:sourceId";
@@ -42,8 +42,8 @@ export function useSources() {
   const [newSourceFormat, setNewSourceFormat] = useState<SourceSeedFormat>("markdown");
   const [newSourceData, setNewSourceData] = useState("");
 
-  async function fetchSources() {
-    const res = await fetch("/api/sources");
+  const fetchSources = useCallback(async () => {
+    const res = await fetch("/api/sources", { cache: "no-store" });
     const json = (await res.json()) as { sources?: Source[]; tree?: SourceTreeNode[] };
     const list: Source[] = json.sources ?? [];
     const treeList: SourceTreeNode[] = json.tree ?? [];
@@ -67,8 +67,12 @@ export function useSources() {
         // First visit or stale persisted id — open the kind of the first source
         setExpandedChannels(new Set([target.channel ?? "manual_upload"]));
       }
+    } else {
+      // New account or no channels — do not keep the previous user's selection in memory or LS
+      writeLs(LS_SOURCE_ID, "");
+      setSourceIdState("");
     }
-  }
+  }, []);
 
   async function createSource() {
     const name = newSourceName.trim();
