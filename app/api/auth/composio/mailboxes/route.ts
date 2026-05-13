@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { hasComposio } from "@/lib/composio/client";
-import { getComposioAccessToken } from "@/lib/composio/tokens";
+import { getComposioAccessTokenDetailed } from "@/lib/composio/tokens";
 
 export const dynamic = "force-dynamic";
+
+const MASKING_HINT =
+  "Composio is masking access tokens. In Composio → Settings → Project Configuration, disable “Mask Connected Account Secrets”, then reconnect Gmail.";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -27,27 +30,37 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "COMPOSIO_API_KEY not configured" }, { status: 500 });
   }
 
-  const token = await getComposioAccessToken(authId);
-  if (!token) {
-    return NextResponse.json({ error: "Authorization not yet completed" }, { status: 202 });
+  const tokenResult = await getComposioAccessTokenDetailed(authId);
+  if (!tokenResult.ok) {
+    if (tokenResult.reason === "masked") {
+      return NextResponse.json({ error: MASKING_HINT }, { status: 503 });
+    }
+    if (tokenResult.reason === "inactive") {
+      return NextResponse.json({ error: "Authorization not yet completed" }, { status: 202 });
+    }
+    return NextResponse.json({ error: "No access token on connected account — try reconnecting." }, { status: 503 });
   }
+  const token = tokenResult.token;
 
   if (provider === "google") {
-    const profileRes = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
+    // Gmail connect scopes are gmail.* — not userinfo.* — so use Gmail API profile.
+    const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!profileRes.ok) {
-      return NextResponse.json({ error: "Failed to fetch Gmail profile" }, { status: 502 });
+      const detail = await profileRes.text();
+      return NextResponse.json(
+        { error: `Gmail profile failed (${profileRes.status}). ${detail.slice(0, 200)}` },
+        { status: 502 },
+      );
     }
-    const profile = (await profileRes.json()) as { email?: string; name?: string };
+    const profile = (await profileRes.json()) as { emailAddress?: string };
+    const email = profile.emailAddress ?? "";
+    if (!email) {
+      return NextResponse.json({ error: "Gmail profile did not return an email address" }, { status: 502 });
+    }
     return NextResponse.json({
-      mailboxes: [
-        {
-          id: profile.email ?? "primary",
-          label: profile.email ?? "Primary inbox",
-          email: profile.email ?? "",
-        },
-      ],
+      mailboxes: [{ id: email, label: email, email }],
     });
   }
 
@@ -55,7 +68,11 @@ export async function GET(req: Request) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!msRes.ok) {
-    return NextResponse.json({ error: "Failed to fetch Outlook profile" }, { status: 502 });
+    const detail = await msRes.text();
+    return NextResponse.json(
+      { error: `Outlook profile failed (${msRes.status}). ${detail.slice(0, 200)}` },
+      { status: 502 },
+    );
   }
   const ms = (await msRes.json()) as { displayName?: string; mail?: string; userPrincipalName?: string };
   const email = ms.mail ?? ms.userPrincipalName ?? "primary";
