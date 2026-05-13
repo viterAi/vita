@@ -12,6 +12,7 @@ import {
   l2RowsToSourceDataRows,
   resolveSourceKey,
 } from "../../../../../lib/genui/l2-source";
+import { decodeSourceIdPathSegment } from "@/lib/genui/source-key";
 
 const MAX_PAGE_FILL_ATTEMPTS = 20;
 
@@ -29,7 +30,7 @@ export async function GET(
 
   const { sourceId } = await params;
   void request;
-  const sourceKey = decodeURIComponent(sourceId);
+  const sourceKey = decodeSourceIdPathSegment(sourceId);
 
   const resolved = await resolveSourceKey(supabase, sourceKey);
 

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import type { Row, View, Draft, AiPage, AiPageStatus, AiStatus, ProgressStep, Source, ComponentTrigger } from "../types";
 import { STEER_HINTS } from "../utils";
+import { sourceIdPathSegment } from "@/lib/genui/source-key";
 
 function lsTabKey(srcId: string) { return `gui:tab:${srcId}`; }
 function readTab(srcId: string): string | null {
@@ -10,6 +11,18 @@ function readTab(srcId: string): string | null {
 }
 function writeTab(srcId: string, pageId: string) {
   try { localStorage.setItem(lsTabKey(srcId), pageId); } catch { /* ignore */ }
+}
+
+function summarizeApiError(status: number, body: string): string {
+  const trimmed = body.trim();
+  if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html") || trimmed.includes("<title>404")) {
+    return `Could not load source (HTTP ${status}). Refresh the page or redeploy if you just updated.`;
+  }
+  try {
+    const json = JSON.parse(trimmed) as { error?: string };
+    if (json.error) return json.error;
+  } catch { /* not JSON */ }
+  return trimmed.slice(0, 280) || `Request failed (HTTP ${status}).`;
 }
 
 interface UseCanvasOptions {
@@ -96,7 +109,7 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
 
     setIsRefreshingContent(true);
     try {
-      const refreshRes = await fetch(`/api/sources/${srcId}/canvas/refresh`, {
+      const refreshRes = await fetch(`/api/sources/${sourceIdPathSegment(srcId)}/canvas/refresh`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ pages, trigger }),
@@ -206,7 +219,7 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
 
     try {
       // ── Step 1: check for a saved view ────────────────────────────────────
-      const viewsRes = await fetch(`/api/sources/${selectedSourceId}/views`);
+      const viewsRes = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/views`);
       if (viewsRes.ok) {
         const viewsJson = (await viewsRes.json()) as { views?: Array<{ id: string; spec?: { ai_pages?: AiPage[] }; is_default?: boolean }> };
         const defaultView = viewsJson.views?.find((v) => v.is_default && v.spec?.ai_pages && v.spec.ai_pages.length > 0);
@@ -225,7 +238,7 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
           // Hydrate rows for row-dependent components (charts, tables, activity feeds)
           // so they render with real data even without a full AI run.
           try {
-            const rowsRes = await fetch(`/api/sources/${selectedSourceId}/invoices`);
+            const rowsRes = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/invoices`);
             if (rowsRes.ok) {
               const rowsJson = (await rowsRes.json()) as { invoices?: Row[] };
               if (rowsJson.invoices) setRows(rowsJson.invoices);
@@ -271,7 +284,7 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
         success = true;
       } else {
         // Create new default view
-        const res = await fetch(`/api/sources/${selectedSourceId}/views`, {
+        const res = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/views`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -312,11 +325,12 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
     setAiWarnings([]);
     setRows([]);
 
-    const res = await fetch(`/api/sources/${selectedSourceId}/canvas`);
+    const res = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/canvas`);
     if (!res.ok || !res.body) {
       const errorText = await res.text().catch(() => "");
-      setCanvasError(errorText || "Failed to connect to canvas API.");
-      setAiStatus({ state: "invalid", last_error: errorText || null });
+      const message = summarizeApiError(res.status, errorText);
+      setCanvasError(message);
+      setAiStatus({ state: "invalid", last_error: message });
       setGenerating(false);
       return;
     }
@@ -402,7 +416,7 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
     setProgressLog([]);
 
     try {
-      const res = await fetch(`/api/sources/${sourceId}/steer`, {
+      const res = await fetch(`/api/sources/${sourceIdPathSegment(sourceId)}/steer`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message, currentPages: aiPages }),

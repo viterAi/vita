@@ -5,6 +5,7 @@ import {
   l2RowsToSourceDataRows,
   resolveSourceKey,
 } from "../../../../../lib/genui/l2-source";
+import { decodeSourceIdPathSegment } from "@/lib/genui/source-key";
 
 /**
  * Returns the rows backing the active saved layout for a source.
@@ -27,7 +28,7 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
   const { sourceId } = await params;
-  const sourceKey = decodeURIComponent(sourceId);
+  const sourceKey = decodeSourceIdPathSegment(sourceId);
 
   const resolved = await resolveSourceKey(supabase, sourceKey);
   if (!resolved) {

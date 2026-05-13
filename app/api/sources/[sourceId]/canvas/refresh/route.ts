@@ -17,6 +17,7 @@ import {
   l2RowsToSourceDataRows,
   resolveSourceKey,
 } from "../../../../../../lib/genui/l2-source";
+import { decodeSourceIdPathSegment } from "@/lib/genui/source-key";
 
 /** Backward-compat fallback: treat these component IDs as dynamic even without mode field. */
 const LEGACY_DYNAMIC_COMPONENTS = new Set(["text_block", "activity_feed"]);
@@ -99,7 +100,7 @@ export async function POST(
   const pages: AiPage[] = body.pages ?? [];
   const triggerFilter: ComponentTrigger | undefined = body.trigger;
 
-  const sourceKey = decodeURIComponent(sourceId);
+  const sourceKey = decodeSourceIdPathSegment(sourceId);
   const resolved = await resolveSourceKey(supabase, sourceKey);
   const l2Rows = resolved ? await fetchL2RowsForSource(supabase, resolved) : [];
   const rows = resolved ? l2RowsToSourceDataRows(l2Rows, resolved.kind) : [];

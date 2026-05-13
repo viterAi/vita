@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseServerClient } from "../../../../../lib/supabase/server";
+import { decodeSourceIdPathSegment } from "@/lib/genui/source-key";
 
 const createViewSchema = z.object({
   viewName: z.string().min(1).default("Default"),
@@ -15,6 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ sourceId: string }> },
 ) {
   const { sourceId } = await params;
+  const sourceKey = decodeSourceIdPathSegment(sourceId);
   const supabase = await getSupabaseServerClient();
 
   const {
@@ -27,7 +29,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("views")
     .select("*")
-    .eq("source_id", sourceId)
+    .eq("source_id", sourceKey)
     .order("sort_order", { ascending: true });
 
   if (error) {
@@ -42,6 +44,7 @@ export async function POST(
   { params }: { params: Promise<{ sourceId: string }> },
 ) {
   const { sourceId } = await params;
+  const sourceKey = decodeSourceIdPathSegment(sourceId);
   const body = createViewSchema.parse(await request.json());
   const supabase = await getSupabaseServerClient();
 
@@ -63,7 +66,7 @@ export async function POST(
   const { data: maxSortRecord } = await supabase
     .from("views")
     .select("sort_order")
-    .eq("source_id", sourceId)
+    .eq("source_id", sourceKey)
     .order("sort_order", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -72,7 +75,7 @@ export async function POST(
     await supabase
       .from("views")
       .update({ is_default: false })
-      .eq("source_id", sourceId);
+      .eq("source_id", sourceKey);
   }
 
   const nextSortOrder = (maxSortRecord?.sort_order ?? -1) + 1;
@@ -85,7 +88,7 @@ export async function POST(
   const { data, error } = await supabase
     .from("views")
     .insert({
-      source_id: sourceId,
+      source_id: sourceKey,
       view_name: body.viewName,
       view_type: body.viewType,
       sort_order: nextSortOrder,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { hasComposio } from "@/lib/composio/client";
+import { getComposioClient, hasComposio } from "@/lib/composio/client";
 import { assertComposioAccountOwnedByUser } from "@/lib/composio/accounts";
 import { listGitHubReposForConnect } from "@/lib/composio/github-repos";
 
@@ -33,7 +33,20 @@ export async function GET(req: Request) {
 
   try {
     const repos = await listGitHubReposForConnect(user.id, authId);
-    return NextResponse.json({ repos });
+    const account = await getComposioClient().connectedAccounts.get(authId);
+    const tokenScope = (account.state?.val as { scope?: string } | undefined)?.scope ?? "";
+    const needsReconnect =
+      account.status === "ACTIVE" &&
+      !tokenScope.split(/[\s,]+/).includes("read:org");
+    return NextResponse.json({
+      repos,
+      ...(needsReconnect
+        ? {
+            reconnect_hint:
+              "Reconnect GitHub to grant organization access (read:org). Existing connections authorized before this update cannot list org repos until you connect again.",
+          }
+        : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.includes("INITIATED") || message.includes("PENDING")) {

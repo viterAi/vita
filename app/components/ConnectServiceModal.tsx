@@ -127,6 +127,7 @@ export function ConnectServiceModal({ onClose, onConnected }: ConnectServiceModa
   const [selectedCanInstallWebhook, setSelectedCanInstallWebhook] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [githubReconnectHint, setGithubReconnectHint] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -167,12 +168,18 @@ export function ConnectServiceModal({ onClose, onConnected }: ConnectServiceModa
     try {
       if (service.id === "github") {
         setManualRepoSlug("");
+        setGithubReconnectHint(null);
         const res = await fetch(`/api/auth/composio/repos?auth_id=${encodeURIComponent(id)}`, {
           credentials: "include",
         });
-        const j = await res.json().catch(() => ({})) as { repos?: Repo[]; error?: string };
+        const j = await res.json().catch(() => ({})) as {
+          repos?: Repo[];
+          error?: string;
+          reconnect_hint?: string;
+        };
         if (!res.ok) throw new Error(j.error ?? res.statusText);
         setRepos(j.repos ?? []);
+        setGithubReconnectHint(j.reconnect_hint ?? null);
       } else {
         const res = await fetch(
           `/api/auth/composio/mailboxes?auth_id=${encodeURIComponent(id)}&provider=${service.id}`,
@@ -423,6 +430,11 @@ export function ConnectServiceModal({ onClose, onConnected }: ConnectServiceModa
                   <p style={{ fontSize: 12, color: "var(--ink-tertiary)", margin: "0 0 10px", lineHeight: 1.45 }}>
                     Includes your repos, collaborations, and <strong style={{ fontWeight: 600 }}>organization</strong> repos you can access (up to 500, newest first).
                   </p>
+                  {githubReconnectHint && (
+                    <p style={{ fontSize: 12, color: "#b45309", margin: "0 0 10px", lineHeight: 1.45, padding: "8px 10px", borderRadius: "var(--r-card)", border: "0.5px solid #fcd34d", background: "#fffbeb" }}>
+                      {githubReconnectHint}
+                    </p>
+                  )}
                   <input
                     autoFocus
                     placeholder="Search repositories…"

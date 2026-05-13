@@ -10,6 +10,34 @@ const TOOLKIT_SLUG: Record<ComposioProvider, string> = {
 
 const authConfigCache = new Map<string, string>();
 
+/** Scopes required to list org memberships and auto-install repo webhooks. */
+const GITHUB_OAUTH_SCOPES = [
+  "repo",
+  "user",
+  "gist",
+  "notifications",
+  "project",
+  "workflow",
+  "codespace",
+  "read:org",
+  "admin:repo_hook",
+] as const;
+
+async function ensureGithubAuthConfigScopes(authConfigId: string): Promise<void> {
+  const composio = getComposioClient();
+  const cfg = await composio.authConfigs.get(authConfigId);
+  const scopeList = cfg.credentials?.scopes;
+  const current = new Set(Array.isArray(scopeList) ? scopeList : []);
+  const missing = GITHUB_OAUTH_SCOPES.filter((s) => !current.has(s));
+  if (missing.length === 0) return;
+
+  const merged = [...new Set([...current, ...GITHUB_OAUTH_SCOPES])];
+  await composio.authConfigs.update(authConfigId, {
+    type: "default",
+    scopes: merged.join(","),
+  });
+}
+
 /** Resolve the Composio auth config (`ac_…`) for a provider from the project API. */
 export async function resolveComposioAuthConfigId(provider: ComposioProvider): Promise<string> {
   const slug = TOOLKIT_SLUG[provider];
@@ -29,6 +57,10 @@ export async function resolveComposioAuthConfigId(provider: ComposioProvider): P
     throw new Error(
       `No Composio auth config for toolkit "${slug}". Enable ${slug} (managed OAuth) in your Composio project.`,
     );
+  }
+
+  if (provider === "github") {
+    await ensureGithubAuthConfigScopes(id);
   }
 
   authConfigCache.set(slug, id);
