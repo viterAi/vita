@@ -9,6 +9,8 @@
 
 ## Context
 
+**Implementation status (Gui repo, May 2026):** Dock chat talks to **`/api/sources/[sourceId]/steer`** with SSE streaming for the **spec-update path**. Successful steer flows merge into **`POST /api/views/[viewId]/apply`** and bump **`view_versions`**. **Not yet implemented vs this ticket:** explicit three-way classifier UX (ephemeral filter vs spec vs preference), persistent **`tom_log`** preference writes, rich streaming progress copy, multi-thread interruption rules per [`CHECKLIST.md`](../../CHECKLIST.md) §7.
+
 The Steer loop is the core interaction model. The user types something in the chat ("move the chart to the top," "show only invoices over $5k," "this client is important") and the system routes the input to the right layer:
 
 - **Ephemeral filter** — applies a filter to the current view, no spec change
@@ -104,7 +106,7 @@ When the user navigates between views or sources, the active dock thread changes
 
 ## Notes for the Agent
 
-- Don't build multi-thread support yet (one active thread per view is enough for v1). T-008 will add multi-view tabs which forces multi-thread.
+- Per-view steer transcripts land with **T-008** (`ui_state.steer_messages`); this ticket still owns **classification**, **ephemeral filters**, **`tom_log`**, and **streaming UX** quality bar from [`CHECKLIST.md`](../../CHECKLIST.md) §7.
 - Don't build agent initiation yet (agent reaching out to user) — that's a future ticket.
 - Don't try to make the dock work as an MCP App or as a separate widget — it's a normal UI component for now. MCP Apps integration is T-017.
 - Use streaming SSE (already implemented in the prototype) for the regeneration progress.

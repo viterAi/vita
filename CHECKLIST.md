@@ -75,21 +75,21 @@ Check off each item when complete. Items marked ⚡ are blocking other work.
 - [x] "Save this layout" action — freezes spec as default
 - [x] Saved views load from stored spec + fresh data (no AI call)
 - [x] "Regenerate from scratch" is explicit action, not default
-- [ ] Steer modifications (via dock) update saved spec
-- [ ] Version history: each spec change creates a version entry
-- [ ] Rollback: user can revert to previous version
+- [x] Steer modifications (via dock) update saved spec — persisted via `/api/views/[id]/apply` when steer returns new `ai_pages` (requires saved view id)
+- [x] Version history: each spec change creates a version entry — `view_versions` on apply / steer-save / restore; initial row on create
+- [x] Rollback: user can revert to previous version — **Versions** strip → Restore (`POST /api/views/[id]/restore`)
 
 ---
 
 ## 6. Multi-View Model
 
-- [ ] Multiple views per source supported
-- [ ] Tab UI for switching between views
-- [ ] Add view button (triggers generation)
-- [ ] Rename, reorder, duplicate, delete views
-- [ ] Set default view per source
-- [ ] Each view has independent spec, independent dock/Steer history
-- [ ] Composed mode: multiple views side by side, independently steerable
+- [x] Multiple views per source supported — list order via `sort_order`
+- [x] Tab UI for switching between views — **Views** row in TabBar
+- [x] Add view button (triggers generation) — **+ View** runs canvas then saves into new row
+- [x] Rename, reorder, duplicate, delete views — inline actions + PATCH / reorder API / duplicate route / DELETE
+- [x] Set default view per source — **Default** (★ marker); PATCH `isDefault`
+- [x] Each view has independent spec, independent dock/Steer history — spec per row; steer transcript in `ui_state.steer_messages`, persisted on switch / steer-save
+- [ ] Composed mode: multiple views side by side, independently steerable — **Split** shows primary + read-only secondary pane; dock still drives primary only (secondary steer deferred)
 
 ---
 

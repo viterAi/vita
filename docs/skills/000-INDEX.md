@@ -33,15 +33,15 @@ All Wave 1 tickets are done as of May 10, 2026. Wave 2 is unblocked.
 
 ### Wave 2 — Core Loop (can run mostly in parallel after Wave 1)
 
-*Rough alignment with [`CHECKLIST.md`](../../CHECKLIST.md) §§3–7: auth + shell mostly landed; connector / multi-view / full Steer product loop still open.*
+*Rough alignment with [`CHECKLIST.md`](../../CHECKLIST.md) §§3–7. **May 2026 repo status:** T-005 and T-008 are largely implemented (versions/restore, per-layout steer transcript in `ui_state`, compact `TabBar`, compare split); **T-007** (three-way routing, streaming UX, `tom_log`, full §7 parity) and **T-006** remain open.*
 
-| # | Ticket | Est. | Depends on |
-|---|--------|------|------------|
-| 5 | T-005 — View persistence: save/load/regenerate | 1d | T-003 |
-| 6 | T-006 — Connector abstraction interface | 1d | T-003 |
-| 7 | T-007 — Steer loop integration via dock | 1.5d | T-003, T-005 |
-| 8 | T-008 — Multi-view model (tabs, add/rename/delete) | 1d | T-005 |
-| 9 | T-009 — AI failure pattern logging | 0.5d | T-002 |
+| # | Ticket | Est. | Depends on | Repo note |
+|---|--------|------|------------|-----------|
+| 5 | T-005 — View persistence: save/load/regenerate | 1d | T-003 | ✅ Mostly done — see ticket file for actual routes |
+| 6 | T-006 — Connector abstraction interface | 1d | T-003 | Open |
+| 7 | T-007 — Steer loop integration via dock | 1.5d | T-003, T-005 | Partial — steer → `/apply`; classifier / prefs / streaming UX incomplete |
+| 8 | T-008 — Multi-view model (tabs, add/rename/delete) | 1d | T-005 | ✅ Mostly done — reorder via menu/API, not drag-and-drop |
+| 9 | T-009 — AI failure pattern logging | 0.5d | T-002 | Open |
 
 ### Wave 3 — Skills & Quality (after Wave 2)
 

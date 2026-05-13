@@ -1,8 +1,8 @@
 # Auth Wiring Plan — Next.js ↔ Supabase
 
 **Written:** May 10, 2026  
-**Updated:** May 10, 2026  
-**Status:** Steps 1–6 complete — all API routes guarded; step 7 (auth context in views) not yet started  
+**Updated:** May 13, 2026  
+**Status:** Steps 1–6 complete (including auth-guarded `sources`, `canvas`, `steer`, etc.); step 7 (auth context in generated views / `CanvasContent`) not yet started  
 **Depends on:** `docs/auth-and-data-access.md` (DB schema reference)
 
 ---
@@ -16,12 +16,13 @@
 | 3 | Create `app/login/page.tsx` | ✅ Done (password auth, not magic link) |
 | 4 | Add `UserProvider` + `UserContext` | ✅ Done |
 | 5 | Update `bootstrap` route | ✅ Done |
-| 6 | Auth-guard all API routes | ⚠️ Partial — `views` and `apply` guarded; `sources`, `canvas`, `canvas/refresh`, `steer` still unguarded |
+| 6 | Auth-guard all API routes | ✅ Done — matches [`CHECKLIST.md`](../CHECKLIST.md) §3 auth wiring rows (`sources`, `canvas`, `canvas/refresh`, `steer`, `views`, `apply`, …) |
 | 7 | Pass auth context to generated views | ❌ Not started |
 
 **Remaining work:**
 - Pass `{ userId, tenantId }` from `useUser()` into `CanvasContent` (step 7)
-- Replace `getMockMessages()` / `getMockChats()` with real DB queries (currently backed by mock data)
+
+**Data plane:** App sidebar + canvas read **`genui_channels`** / **`genui_l2`** under the user JWT (see [`CHECKLIST.md`](../CHECKLIST.md) §§17–18). Legacy `getMockChats()` / `lib/l0/mock-data` paths are removed from `app/**`.
 
 **Note on Supabase project consolidation:** All three clients (browser, server, admin) now point to the L0 project (`dkccadwohifcqcdzhhnu`). Auth, tenants, and views all live there. The original UI project (`vwqalkghhdgjumjdgtpd`) credentials remain in `.env` but appear unused in active code — confirm with Mordechai before removing.
 
@@ -60,7 +61,7 @@ Every page except `/login` must require an active session. This is handled by a 
 
 ### 3. Login page
 
-A new `app/login/page.tsx` with email + magic link (no passwords). Right for an internal tool — you control who gets invited through the Supabase dashboard. No public signup.
+The shipped **`app/login/page.tsx`** uses **email + password** (see [`CHECKLIST.md`](../CHECKLIST.md) §3). Magic link was considered in an earlier draft of this plan.
 
 ### 4. App reads the tenant from the session
 

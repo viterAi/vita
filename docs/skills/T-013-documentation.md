@@ -77,5 +77,6 @@ Write three authoring guides covering: spec format, connector interface, skill a
 
 - These are practical guides, not academic explanations. Include code, not theory.
 - If something is documented in a SKILL.md or in the spec format types, link to that — don't duplicate.
+- **Canonical checklist:** [`CHECKLIST.md`](../../CHECKLIST.md) at repo root — **ticket index:** [`000-INDEX.md`](./000-INDEX.md).
 - Use diagrams where helpful (Mermaid syntax for flowcharts in markdown).
 - Test the guides by following them yourself: can you actually write a new connector by following your own guide? If not, fix the gaps.

@@ -1,8 +1,8 @@
 # View Builder — Platform Integration Plan
 
 **Author:** Issac Brown  
-**Last updated:** May 7, 2026  
-**Status:** Partially agreed — data flow confirmed with Mrodchi (May 7 2026); remaining questions open  
+**Last updated:** May 13, 2026  
+**Status:** Partially agreed — data flow confirmed with Mrodchi (May 7 2026); Gui prototype now consumes **`genui_l2`** for connected channels; platform handshake questions remain open  
 **Blocks:** checklist items 1.4, 1.5 ⚡
 
 ---
@@ -79,6 +79,8 @@ The primary table is `l2_syntheses` — each row is an AI-generated synthesis sc
 See **[`docs/l2-schema-notes.md`](./l2-schema-notes.md)** for full schema details, current data counts, and SQL traces.
 
 **Agreed (May 7 2026):** View Builder reads all data directly from `l2_syntheses`. No handshake payload. Mrodchi writes; View Builder reads. This is the confirmed data contract.
+
+**Gui prototype (May 2026):** The Next.js app also reads **`public.genui_l2`** (and **`genui_channels`**) for inbox/GitHub-style sources — ingest + mail poll write rows the shell lists in the sidebar. That path is documented in [`CHECKLIST.md`](../CHECKLIST.md) §§16–17 and [`docs/plan-genui-l2-in-ui.md`](./plan-genui-l2-in-ui.md). It does not replace the agreed `l2_syntheses` contract for platform synthesis; it is the **genUI channel** data plane for this repo.
 
 Remaining open questions: what `scope_kind` values will exist beyond `"day"`? What format is `body` in? When will `l3_surfaces` be populated?
 
@@ -244,7 +246,7 @@ The handshake payload between Mrodchi and the View Builder will not change — M
 | Auth | Handled entirely by Supabase RLS — not passed between systems | May 7 2026 |
 | Design tokens | View Builder fetches from Supabase by tenant/user — Mrodchi not involved | May 7 2026 |
 | Multi-view | Internal to View Builder; Mrodchi can query `views` table directly | May 7 2026 |
-| Mock data retained | Source data (sidebar + canvas messages) stays as mock data for now. The real L2 syntheses table doesn't have enough rows yet to generate meaningful views — only a handful of `day` and `meeting` scopes exist. Our own curated mock dataset is richer and more suitable for development and testing. Will switch to real L2 reads once synthesis volume is sufficient. | May 7 2026 |
+| Mock data (superseded May 2026) | ~~Sidebar/canvas mock chats~~ — removed from `app/**`; connected flows use **`genui_l2`**. For **`l2_syntheses`**, volume/format questions above still apply for platform parity. | May 13 2026 |
 | Views table location | `views`, `view_versions`, `view_drafts` tables created in the vita DB (`dkccadwohifcqcdzhhnu`). All view persistence goes through the vita DB. Admin client updated to use `L0_SUPABASE_URL` + `L0_SUPABASE_ANON_KEY`. | May 7 2026 |
 
 ---
@@ -263,8 +265,8 @@ The handshake payload between Mrodchi and the View Builder will not change — M
 ## Next Steps
 
 - [x] Share data flow decision with Mrodchi ✓
-- [x] Confirm View Builder reads from `l2_syntheses` directly ✓
-- [ ] Wire up Supabase L2 reads into the Next.js app (replace `/api/sources` mock layer)
+- [x] Confirm View Builder reads from `l2_syntheses` directly ✓ (platform contract)
+- [x] Wire Supabase reads into the Next.js app for **genUI channels** — `/api/sources` + canvas use **`genui_l2`** (see [`CHECKLIST.md`](../CHECKLIST.md) §17)
 - [x] Define abstract spec format (`lib/types/spec.ts`) — done May 7 2026; see `docs/spec-format.md`
 - [ ] Resolve remaining open questions 2–7 (next joint session)
-- [ ] Mark integration plan fully approved → unblocks spec format work and shell build
+- [ ] Mark integration plan fully approved → unblocks remaining shell / action-routing work

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import type { Row, View, Draft, AiPage, AiPageStatus, AiStatus, ProgressStep, Source, ComponentTrigger } from "../types";
+import { capSteerMessages, steerMessagesFromUiState, type SteerMessage } from "@/lib/views/steer-messages";
 import { STEER_HINTS } from "../utils";
 import { sourceIdPathSegment } from "@/lib/genui/source-key";
 
@@ -71,11 +72,40 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
 
   const [saveError, setSaveError] = useState<string>("");
 
-  const [steerMessages, setSteerMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [steerMessages, setSteerMessages] = useState<SteerMessage[]>([]);
   const [steerInput, setSteerInput] = useState("");
   const [steering, setSteering] = useState(false);
   const [steerHintIdx, setSteerHintIdx] = useState(0);
   const steerScrollRef = useRef<HTMLDivElement | null>(null);
+  /** Secondary saved layout shown beside the primary canvas (read-only). */
+  const [secondaryComposedViewId, setSecondaryComposedViewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSecondaryComposedViewId(null);
+  }, [sourceId]);
+
+  function mapDbViewRow(row: Record<string, unknown>): View {
+    return {
+      id: String(row.id),
+      source_id: String(row.source_id),
+      view_name: String(row.view_name),
+      view_type: String(row.view_type),
+      is_default: Boolean(row.is_default),
+      sort_order: typeof row.sort_order === "number" ? row.sort_order : 0,
+      current_spec_version: typeof row.current_spec_version === "number" ? row.current_spec_version : 1,
+      spec: row.spec as View["spec"],
+      ui_state: row.ui_state as Record<string, unknown> | undefined,
+    };
+  }
+
+  async function refreshViewsList(selectedSourceId: string): Promise<View[]> {
+    const viewsRes = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/views`);
+    if (!viewsRes.ok) return [];
+    const viewsJson = (await viewsRes.json()) as { views?: Record<string, unknown>[] };
+    const mapped = (viewsJson.views ?? []).map(mapDbViewRow);
+    setViews(mapped);
+    return mapped;
+  }
 
   useEffect(() => {
     if (!steering) return;
@@ -216,50 +246,208 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
     setSaveError("");
     setProgressLog([]);
     setLoadingCanvas(true);
+    setSecondaryComposedViewId(null);
 
     try {
-      // ── Step 1: check for a saved view ────────────────────────────────────
-      const viewsRes = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/views`);
-      if (viewsRes.ok) {
-        const viewsJson = (await viewsRes.json()) as { views?: Array<{ id: string; spec?: { ai_pages?: AiPage[] }; is_default?: boolean }> };
-        const defaultView = viewsJson.views?.find((v) => v.is_default && v.spec?.ai_pages && v.spec.ai_pages.length > 0);
+      const list = await refreshViewsList(selectedSourceId);
+      const sorted = [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const pick =
+        sorted.find((v) => v.is_default && Array.isArray(v.spec?.ai_pages) && v.spec.ai_pages.length > 0) ??
+        sorted.find((v) => Array.isArray(v.spec?.ai_pages) && v.spec.ai_pages.length > 0);
 
-        if (defaultView?.spec?.ai_pages) {
-          const savedPages = defaultView.spec.ai_pages;
-          setAiPages(savedPages);
-          const persistedTab = readTab(selectedSourceId);
-          const restoredTab = savedPages.find((p) => p.id === persistedTab)?.id ?? savedPages[0]?.id ?? "";
-          setActiveAiPageId(restoredTab);
-          setAiStatus({ state: "ready", last_error: null });
-          setAiPageStatuses(savedPages.map((p) => ({ page_id: p.id, state: "ready" as const, attempts_used: 0, last_error: null, warnings: [] })));
-          setIsSaved(true);
-          setSavedViewId(defaultView.id);
+      if (pick?.spec?.ai_pages?.length) {
+        const savedPages = pick.spec.ai_pages;
+        setAiPages(savedPages);
+        const persistedTab = readTab(selectedSourceId);
+        const restoredTab = savedPages.find((p) => p.id === persistedTab)?.id ?? savedPages[0]?.id ?? "";
+        setActiveAiPageId(restoredTab);
+        setAiStatus({ state: "ready", last_error: null });
+        setAiPageStatuses(savedPages.map((p) => ({ page_id: p.id, state: "ready" as const, attempts_used: 0, last_error: null, warnings: [] })));
+        setIsSaved(true);
+        setSavedViewId(pick.id);
+        setActiveViewId(pick.id);
+        setSteerMessages(steerMessagesFromUiState(pick.ui_state));
 
-          // Hydrate rows for row-dependent components (charts, tables, activity feeds)
-          // so they render with real data even without a full AI run.
-          try {
-            const rowsRes = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/invoices`);
-            if (rowsRes.ok) {
-              const rowsJson = (await rowsRes.json()) as { invoices?: Row[] };
-              if (rowsJson.invoices) setRows(rowsJson.invoices);
-            }
-          } catch { /* rows are best-effort; layout still renders static components */ }
-
-          // No auto-refresh here — every component on a saved page was already
-          // generated by the AI when the layout was saved. The polling effect
-          // (focus + 30s interval, throttled) keeps dynamic blocks fresh, and
-          // the user can hit "Refresh" in the tab bar for an explicit re-run.
-          return;
+        try {
+          const rowsRes = await fetch(`/api/sources/${sourceIdPathSegment(selectedSourceId)}/invoices`);
+          if (rowsRes.ok) {
+            const rowsJson = (await rowsRes.json()) as { invoices?: Row[] };
+            if (rowsJson.invoices) setRows(rowsJson.invoices);
+          }
+        } catch {
+          /* rows optional */
         }
+
+        return;
       }
 
-      // ── Step 2: no saved view — run full AI generation ─────────────────────
       setIsSaved(false);
       setSavedViewId(null);
+      setActiveViewId("");
+      setSteerMessages([]);
       await fetchCanvas(selectedSourceId);
     } finally {
       setLoadingCanvas(false);
     }
+  }
+
+  async function switchToView(nextViewId: string, opts?: { force?: boolean }) {
+    if (!sourceId) return;
+    if (!opts?.force && nextViewId === savedViewId) return;
+    if (steering) return;
+
+    if (savedViewId) {
+      await fetch(`/api/views/${savedViewId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ui_state: { steer_messages: capSteerMessages(steerMessages) } }),
+      }).catch(() => {});
+    }
+
+    const res = await fetch(`/api/views/${nextViewId}`);
+    if (!res.ok) return;
+    const body = (await res.json()) as { view?: View };
+    const v = body.view;
+    if (!v?.id) return;
+
+    const pages = Array.isArray(v.spec?.ai_pages) ? v.spec.ai_pages : [];
+    setAiPages(pages);
+    const persistedTab = readTab(sourceId);
+    const restoredTab = pages.find((p) => p.id === persistedTab)?.id ?? pages[0]?.id ?? "";
+    setActiveAiPageId(restoredTab);
+    setAiPageStatuses(pages.map((p) => ({ page_id: p.id, state: "ready" as const, attempts_used: 0, last_error: null, warnings: [] })));
+    setAiStatus({ state: "ready", last_error: null });
+    setSavedViewId(v.id);
+    setActiveViewId(v.id);
+    setSteerMessages(steerMessagesFromUiState(v.ui_state));
+    setIsSaved(pages.length > 0);
+
+    try {
+      const rowsRes = await fetch(`/api/sources/${sourceIdPathSegment(sourceId)}/invoices`);
+      if (rowsRes.ok) {
+        const rowsJson = (await rowsRes.json()) as { invoices?: Row[] };
+        if (rowsJson.invoices) setRows(rowsJson.invoices);
+      }
+    } catch {
+      /* optional */
+    }
+
+    await refreshViewsList(sourceId);
+  }
+
+  async function addViewForSource() {
+    if (!sourceId) return;
+    const n = views.length + 1;
+    const res = await fetch(`/api/sources/${sourceIdPathSegment(sourceId)}/views`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        viewName: `View ${n}`,
+        viewType: "spatial",
+        spec: {},
+        aiPages: [],
+        isDefault: views.length === 0,
+      }),
+    });
+    if (!res.ok) return;
+    const json = (await res.json()) as { view?: { id: string } };
+    const id = json.view?.id;
+    if (!id) return;
+    await refreshViewsList(sourceId);
+    setSavedViewId(id);
+    setActiveViewId(id);
+    setSteerMessages([]);
+    await fetchCanvas(sourceId, id);
+  }
+
+  async function duplicateActiveView() {
+    if (!sourceId || !savedViewId) return;
+    const res = await fetch(`/api/views/${savedViewId}/duplicate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    if (!res.ok) return;
+    const json = (await res.json()) as { view?: { id: string } };
+    const id = json.view?.id;
+    if (!id) return;
+    await refreshViewsList(sourceId);
+    await switchToView(id);
+  }
+
+  async function deleteViewById(viewId: string) {
+    if (!sourceId) return;
+    const wasActive = savedViewId === viewId;
+    await fetch(`/api/views/${viewId}`, { method: "DELETE" });
+    const list = await refreshViewsList(sourceId);
+    if (secondaryComposedViewId === viewId) setSecondaryComposedViewId(null);
+    if (!wasActive) return;
+
+    const sorted = [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const next = sorted.find((v) => Array.isArray(v.spec?.ai_pages) && v.spec!.ai_pages!.length > 0);
+    if (next?.id) await switchToView(next.id);
+    else {
+      setAiPages([]);
+      setSavedViewId(null);
+      setActiveViewId("");
+      setSteerMessages([]);
+      setIsSaved(false);
+      await fetchCanvas(sourceId);
+    }
+  }
+
+  async function renameViewById(viewId: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed || !sourceId) return;
+    await fetch(`/api/views/${viewId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewName: trimmed }),
+    });
+    await refreshViewsList(sourceId);
+  }
+
+  async function setDefaultViewById(viewId: string) {
+    await fetch(`/api/views/${viewId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isDefault: true }),
+    });
+    if (sourceId) await refreshViewsList(sourceId);
+  }
+
+  async function reorderViewById(viewId: string, dir: "left" | "right") {
+    if (!sourceId) return;
+    const list = views.length > 0 ? views : await refreshViewsList(sourceId);
+    const sorted = [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const ids = sorted.map((v) => v.id);
+    const i = ids.indexOf(viewId);
+    if (i < 0) return;
+    const j = dir === "left" ? i - 1 : i + 1;
+    if (j < 0 || j >= ids.length) return;
+    const nextIds = [...ids];
+    const tmp = nextIds[i]!;
+    nextIds[i] = nextIds[j]!;
+    nextIds[j] = tmp;
+    const res = await fetch(`/api/sources/${sourceIdPathSegment(sourceId)}/views/reorder`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ orderedViewIds: nextIds }),
+    });
+    if (res.ok && sourceId) await refreshViewsList(sourceId);
+  }
+
+  async function restoreViewVersion(versionNumber: number) {
+    const vid = savedViewId;
+    if (!vid || !sourceId) return;
+    const res = await fetch(`/api/views/${vid}/restore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ versionNumber }),
+    });
+    if (!res.ok) return;
+    await refreshViewsList(sourceId);
+    await switchToView(vid, { force: true });
   }
 
   async function saveLayout(selectedSourceId: string, pages?: AiPage[], existingSavedViewId?: string | null): Promise<boolean> {
@@ -296,13 +484,19 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
         });
         if (!res.ok) throw new Error(`Save failed: ${res.status}`);
         const json = (await res.json()) as { view?: { id: string } };
-        if (json.view?.id) setSavedViewId(json.view.id);
+        if (json.view?.id) {
+          setSavedViewId(json.view.id);
+          setActiveViewId(json.view.id);
+        }
         setIsSaved(true);
         success = true;
       }
     } catch (err) {
       console.error("[saveLayout]", err);
       setSaveError("Failed to save layout. Please try again.");
+    }
+    if (success && selectedSourceId) {
+      await refreshViewsList(selectedSourceId);
     }
     setIsSavingLayout(false);
     return success;
@@ -411,7 +605,9 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
     const message = (overrideMessage ?? steerInput).trim();
     if (!message || !sourceId || steering) return;
     if (!overrideMessage) setSteerInput("");
-    setSteerMessages((prev) => [...prev, { role: "user", content: message }]);
+    const steerTargetViewId = savedViewId;
+    let steerAccum: SteerMessage[] = [...steerMessages, { role: "user", content: message }];
+    setSteerMessages(steerAccum);
     setSteering(true);
     setProgressLog([]);
 
@@ -422,7 +618,8 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
         body: JSON.stringify({ message, currentPages: aiPages }),
       });
       if (!res.ok || !res.body) {
-        setSteerMessages((prev) => [...prev, { role: "assistant", content: "Failed to connect to steer API." }]);
+        steerAccum = [...steerAccum, { role: "assistant", content: "Failed to connect to steer API." }];
+        setSteerMessages(steerAccum);
         setSteering(false);
         return;
       }
@@ -459,17 +656,23 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
             if (target === "page") {
               setActiveAiPageId(id);
               const page = aiPages.find((p) => p.id === id);
-              setSteerMessages((prev) => [...prev, { role: "assistant", content: `Switched to "${page?.title ?? id}".` }]);
+              const txt = `Switched to "${page?.title ?? id}".`;
+              steerAccum = [...steerAccum, { role: "assistant", content: txt }];
+              setSteerMessages(steerAccum);
             } else if (target === "source") {
               setSourceId(id);
               void fetchCanvas(id);
               const src = sources.find((s) => s.id === id);
-              setSteerMessages((prev) => [...prev, { role: "assistant", content: `Switched to source "${src?.name ?? id}".` }]);
+              const txt = `Switched to source "${src?.name ?? id}".`;
+              steerAccum = [...steerAccum, { role: "assistant", content: txt }];
+              setSteerMessages(steerAccum);
             }
           }
           if (eventType === "query_answer") {
             nonSpecAnswered = true;
-            setSteerMessages((prev) => [...prev, { role: "assistant", content: event.answer as string }]);
+            const ans = (event.answer as string) ?? "";
+            steerAccum = [...steerAccum, { role: "assistant", content: ans }];
+            setSteerMessages(steerAccum);
           }
           if (eventType === "plan_ready") {
             const pages = (event.pages as Array<{ id: string; title: string; description: string }>) ?? [];
@@ -497,33 +700,59 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
             const d = event as { tom_noted?: boolean; instruction?: string; ai_pages?: AiPage[]; ai_page_statuses?: AiPageStatus[]; ai_warnings?: string[]; ai_status?: AiStatus };
             if (d.tom_noted) {
               tomNoted = true;
-              setSteerMessages((prev) => [...prev, { role: "assistant", content: `Got it — I'll remember: "${d.instruction ?? message}"` }]);
+              const txt = `Got it — I'll remember: "${d.instruction ?? message}"`;
+              steerAccum = [...steerAccum, { role: "assistant", content: txt }];
+              setSteerMessages(steerAccum);
             }
             if (d.ai_pages && d.ai_pages.length > 0) {
               latestPages = d.ai_pages;
               setAiPages(d.ai_pages);
               setActiveAiPageId((cur) => cur && d.ai_pages?.some((p) => p.id === cur) ? cur : d.ai_pages?.[0]?.id ?? "");
-              setIsSaved(false);
+              if (!steerTargetViewId) setIsSaved(false);
               specChanged = true;
             }
             if (d.ai_page_statuses) setAiPageStatuses(d.ai_page_statuses);
             if (d.ai_warnings) setAiWarnings(d.ai_warnings);
             if (d.ai_status) setAiStatus(d.ai_status);
             if (!tomNoted && !nonSpecAnswered) {
-              setSteerMessages((prev) => [...prev, { role: "assistant", content: "Done — view updated." }]);
+              steerAccum = [...steerAccum, { role: "assistant", content: "Done — view updated." }];
+              setSteerMessages(steerAccum);
             }
           }
           if (eventType === "error") {
-            setSteerMessages((prev) => [...prev, { role: "assistant", content: (event.error as string) ?? "Something went wrong." }]);
+            const txt = (event.error as string) ?? "Something went wrong.";
+            steerAccum = [...steerAccum, { role: "assistant", content: txt }];
+            setSteerMessages(steerAccum);
           }
         }
       }
-      // After a spec change, refresh any dynamic components listening to dock_context_change.
+      if (specChanged && steerTargetViewId) {
+        try {
+          const persistRes = await fetch(`/api/views/${steerTargetViewId}/apply`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              summary: `Steer: ${message.slice(0, 180)}`,
+              spec: { ai_pages: latestPages },
+              ui_state: { steer_messages: capSteerMessages(steerAccum) },
+            }),
+          });
+          if (persistRes.ok) {
+            setIsSaved(true);
+            void refreshViewsList(sourceId);
+          } else {
+            setIsSaved(false);
+          }
+        } catch {
+          setIsSaved(false);
+        }
+      }
       if (specChanged) {
         void runContentRefresh(sourceId, latestPages, "dock_context_change");
       }
     } catch {
-      setSteerMessages((prev) => [...prev, { role: "assistant", content: "Request failed." }]);
+      steerAccum = [...steerAccum, { role: "assistant", content: "Request failed." }];
+      setSteerMessages(steerAccum);
     }
 
     setSteering(false);
@@ -539,6 +768,7 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ summary: "Apply latest auto-generated draft.", draftId: draft.id }),
     });
+    if (sourceId) await refreshViewsList(sourceId);
     await fetchCanvas(sourceId);
     setBusy("");
   }
@@ -566,6 +796,20 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
     ]);
   }
 
+  function toggleComposedSplit() {
+    if (secondaryComposedViewId) {
+      setSecondaryComposedViewId(null);
+      return;
+    }
+    const sorted = [...views].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const other = sorted.find((v) => v.id !== savedViewId);
+    if (other) setSecondaryComposedViewId(other.id);
+  }
+
+  function setComposedSecondary(id: string | null) {
+    setSecondaryComposedViewId(id);
+  }
+
   return {
     views, setViews, activeViewId, setActiveViewId,
     rows, pendingDraft, setPendingDraft,
@@ -575,8 +819,20 @@ export function useCanvas({ sourceId, sources, setSourceId, setBusy }: UseCanvas
     isSaved, isSavingLayout, isRefreshingContent, refreshingComponentIds, saveError,
     steerMessages, steerInput, setSteerInput,
     steering, steerHintIdx, steerScrollRef,
+    secondaryComposedViewId,
     loadOrGenerate, fetchCanvas, saveLayout, regenerate,
     sendSteerMessage, applyDraft, markFollowedUp, addOfflineMessage,
     refreshDynamic,
+    switchToView,
+    addViewForSource,
+    duplicateActiveView,
+    deleteViewById,
+    renameViewById,
+    setDefaultViewById,
+    reorderViewById,
+    restoreViewVersion,
+    toggleComposedSplit,
+    setComposedSecondary,
+    savedViewId,
   };
 }

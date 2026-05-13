@@ -213,8 +213,10 @@ body { min-height: 100vh; }
 
 /* Drag handle hover */
 .drag-handle { transition: opacity 0.15s; }
-.drag-handle:hover > .drag-pip {
-  opacity: 1 !important;
-  background: var(--ink-quaternary) !important;
-  height: 48px !important;
+.details-tabmenu > summary {
+  list-style: none;
 }
+.details-tabmenu > summary::-webkit-details-marker {
+  display: none;
+}
+

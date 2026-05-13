@@ -9,6 +9,8 @@
 
 ## Context
 
+**Implementation status (Gui repo, May 2026):** Multiple saved layouts per source use **`sort_order`**, **`PATCH`** updates, and **`POST /api/sources/[sourceId]/views/reorder`**. The **`TabBar`** shows compact rows for source (**SRC**), layouts (**LYT** pills + **+**), optional **2-up** compare (reference pane read-only; steer still targets primary only — [`CHECKLIST.md`](../../CHECKLIST.md) §6), and **PG** page strips. Rename / duplicate / delete / default / reorder are in the layout **⚙** menu (rename uses a browser prompt, not double-click tabs). Per-view steer transcript is stored in **`views.ui_state.steer_messages`** and persisted when switching layouts / after steer-save (**`useCanvas`**). **Drag-and-drop tab reorder is not implemented** — **Move left / Move right** menu actions persist order instead.
+
 A single source can have multiple views. A user might want their Xero source to have:
 - An "Aging Overview" dashboard (spatial)
 - A "Triage" sequential view for invoices needing attention
@@ -96,24 +98,29 @@ interface DockThread {
 
 ## Acceptance Criteria
 
-- [ ] Tab UI renders all views for the current source
-- [ ] "+ Add View" button works: opens prompt, generates view, adds tab
-- [ ] Inline rename works (double-click tab → edit → Enter)
-- [ ] Delete works with confirmation
-- [ ] Duplicate works: creates a new view with the same spec
-- [ ] Set as default works: persisted in `views.is_default`
-- [ ] Opening a source loads the default view (or first view if no default)
-- [ ] Dock thread switches when user switches views — verify with messages in different views
-- [ ] Draft messages preserved when switching views
-- [ ] Drag-and-drop reorder works (tabs can be dragged left/right; order persisted in `views.position` field)
-- [ ] If a source has zero views, an empty state shows with a single "Generate your first view" button
+- [x] Layout strip renders all saved views for the current source (`TabBar` **LYT** row)
+- [x] **+** creates a new layout (generation + save flow — wording differs from “Add View” modal in ticket)
+- [ ] Inline rename (double-click tab) — **not implemented**; rename via **⚙ → Rename…** prompt
+- [x] Delete works with confirmation (menu + confirm dialog)
+- [x] Duplicate layout (API + menu)
+- [x] Set as default — persisted as **`is_default`** / **★** marker in UI
+- [x] Default vs first layout selection when opening a source — **`useCanvas`** / bootstrap behavior
+- [x] Steer messages scoped per layout — **`ui_state.steer_messages`** persisted on switch / steer-save
+- [ ] Draft **dock input** preserved when switching views — verify explicitly (not guaranteed by transcript persistence alone)
+- [ ] Drag-and-drop reorder — **deferred**; **`sort_order`** + **Move left / right** implemented instead
+- [ ] Dedicated zero-layout empty state with single CTA — confirm vs generic canvas empty states (tracked in [`CHECKLIST.md`](../../CHECKLIST.md) if gaps remain)
+
+### Composed / compare mode
+
+- [x] **2-up** split with selectable reference layout — primary editable; reference read-only ([`CHECKLIST.md`](../../CHECKLIST.md) §6 last bullet)
+- [ ] Independently steerable secondary pane — **explicitly deferred**
 
 ---
 
 ## Notes for the Agent
 
-- Add a `position` integer column to `views` for drag-reorder. Default to highest existing position + 1 on insert.
-- Use a small library like `@dnd-kit/core` for drag-and-drop. Don't build it from scratch.
-- The "Add View" prompt could be as simple as a text input + a few suggested view types as buttons ("Dashboard," "Triage queue," "Project board"). Don't over-design.
-- Tab overflow: if there are too many tabs to fit, add horizontal scrolling or an overflow dropdown. Don't wrap tabs to multiple rows.
-- This ticket doesn't include composed mode (multiple views visible at once). That's later.
+- **Order:** Repo uses **`sort_order`** + **`POST …/views/reorder`** + menu-driven **Move left / right**, not `@dnd-kit` drag tabs — align future work with [`CHECKLIST.md`](../../CHECKLIST.md) §6 before adding DnD.
+- Rename uses **`window.prompt`** today — upgrading to inline edit is optional UX polish.
+- The "+ layout" flow triggers canvas generation — prompt richness can still match the ticket’s suggestions (“Dashboard,” “Triage queue,” …) without blocking persistence.
+- **Overflow:** Layout pills wrap within **`TabBar`**; horizontal scroll applies mainly to **PG** page titles.
+- **Compare:** **2-up** split ships read-only reference pane; dual steer remains deferred ([`CHECKLIST.md`](../../CHECKLIST.md) §6).

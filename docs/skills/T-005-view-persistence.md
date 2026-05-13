@@ -9,7 +9,9 @@
 
 ## Context
 
-Right now, every time a user opens a view, the AI regenerates it from scratch. This is slow, inconsistent (same data may produce slightly different layouts), and burns tokens. It also means there's no way for a user to say "I like this view, keep it stable."
+**Implementation status (Gui repo, May 2026):** Persistence is implemented against **`public.views`**, **`view_versions`**, and **`view_drafts`**. Saving/updating specs flows through **`POST /api/views/[viewId]/apply`** (including steer-driven updates). Version snapshots are written on apply / steer-save / restore; **`POST /api/views/[viewId]/restore`** rolls back; **`GET /api/views/[viewId]/versions`** lists history. The Canvas **⋯** menu exposes **Save layout**, **Regenerate from scratch**, and **Version history…** (inline strip). The SQL sketch below is illustrative — use migrations in **`supabase/migrations/`** as source of truth.
+
+**Motivation:** Without persistence, opening a source might regenerate from scratch every time — slow, inconsistent, and expensive. Saved layouts fix that: freeze the spec, refresh data only, and steer or regenerate deliberately.
 
 Views need a lifecycle:
 1. AI generates a proposal
@@ -103,20 +105,21 @@ CREATE TABLE view_versions (
 
 ## Acceptance Criteria
 
-- [ ] Supabase migration applied: `views` and `view_versions` tables exist
-- [ ] API endpoints implemented and tested:
-  - [ ] `POST /api/views` — create or save a view
-  - [ ] `GET /api/views/:id` — load a view's current spec
-  - [ ] `GET /api/views/:id/versions` — list version history
-  - [ ] `POST /api/views/:id/versions/:versionId/restore` — rollback
-  - [ ] `POST /api/views/:id/regenerate` — explicit regeneration
-- [ ] UI: "Save" button on draft views (becomes "Saved" with timestamp after click)
-- [ ] UI: "Regenerate" action in a menu (with confirmation dialog)
-- [ ] UI: Version history panel accessible from view settings
-- [ ] Saved views load WITHOUT triggering AI generation (verify by checking logs)
-- [ ] Fresh data fetched on every load (verify by changing source data and seeing it reflected)
-- [ ] Each save creates a new entry in `view_versions`
-- [ ] Rollback works: previewing a version then restoring it correctly updates the current spec
+Use this list as **verification**, not the literal route names from the original sketch.
+
+- [x] Supabase migrations applied: `views` and `view_versions` (and related RLS) exist
+- [x] API surface (auth-guarded) — verify in `app/api/views/` and `app/api/sources/[sourceId]/views/`:
+  - [x] Load / patch / delete view — `GET` · `PATCH` · `DELETE` **`/api/views/[viewId]`**
+  - [x] Apply spec / steer result — **`POST /api/views/[viewId]/apply`**
+  - [x] List versions — **`GET /api/views/[viewId]/versions`**
+  - [x] Restore — **`POST /api/views/[viewId]/restore`** (body selects target version)
+  - [x] Duplicate — **`POST /api/views/[viewId]/duplicate`**
+  - [ ] Dedicated **`POST /api/views/[id]/regenerate`** (optional — regeneration may stay coupled to the canvas generation flow + explicit UI action)
+- [x] UI: Save layout + Regenerate + Version history — **`app/components/TabBar.tsx`** (Canvas ⋯ menu) + restore actions in history strip
+- [x] Saved views reload **without** full AI regeneration (steer excepted)
+- [x] Fresh **L2 / channel** data on load and refresh paths — see **`useCanvas`** + `/api/sources/[sourceId]/canvas`
+- [x] Material spec changes create **`view_versions`** rows (initial row on view create)
+- [x] Restore updates current spec and records the rollback in history
 
 ---
 

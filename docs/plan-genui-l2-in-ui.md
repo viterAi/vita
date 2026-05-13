@@ -1,13 +1,13 @@
 # Plan — genUI L2 in the UI (per-user)
 
-**Owner:** Issac Brown · **Status:** in progress · **Started:** May 12, 2026
-**Branch:** `feat/genui-l2-in-ui` · **Tracker:** `CHECKLIST.md` §17
+**Owner:** Issac Brown · **Status:** shipped for core paths — see [`CHECKLIST.md`](../CHECKLIST.md) §17 for remaining deferrals · **Started:** May 12, 2026  
+**Branch:** `feat/genui-l2-in-ui` (historical) · **Tracker:** [`CHECKLIST.md`](../CHECKLIST.md) §17
 
 ---
 
 ## 1. Goal
 
-Replace the mock chat/feed data that currently powers the left sidebar and canvas with real `public.genui_l2` rows from Supabase, scoped per signed-in user via the existing RLS policies. The visible work product: when a user signs in, the sidebar lists the channels they (or their tenant) have connected via the "Corn jobs" flow, and clicking a channel renders an AI-generated view over that channel's L2 synthesis rows.
+Replace legacy mock chat/feed data with real **`public.genui_l2`** rows from Supabase, scoped per signed-in user via RLS. When a user signs in, the sidebar lists channels from ingest / Corn jobs; selecting a leaf renders the canvas over that channel's (or group's) L2 rows.
 
 This is the data swap behind the existing canvas — *not* a new surface, *not* a new AI pipeline.
 

@@ -43,7 +43,13 @@ export async function POST(
     .maybeSingle();
 
   const nextSort = (maxSortRecord?.sort_order ?? -1) + 1;
-  const spec = ensureSpecQuality(srcView.spec as PersistedViewSpec);
+  let spec: Record<string, unknown>;
+  try {
+    spec = ensureSpecQuality(srcView.spec as PersistedViewSpec) as unknown as Record<string, unknown>;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Invalid spec";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
   const name = body.viewName ?? `Copy of ${srcView.view_name}`;
 
   const { data: inserted, error: insertError } = await supabase

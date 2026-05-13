@@ -7,9 +7,11 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { TabBar } from "./components/TabBar";
 import { Dock } from "./components/Dock";
 import { CanvasContent } from "./components/CanvasContent";
+import { ComposedCanvasPane } from "./components/ComposedCanvasPane";
 import { CornJobsCanvas } from "./components/CornJobsCanvas";
 import { useUser } from "@/lib/auth/UserContext";
 import { useResizablePanels } from "./hooks/useResizablePanels";
+import { useCompareSplitResize, COMPARE_MIN_PRIMARY } from "./hooks/useCompareSplitResize";
 import { useSources } from "./hooks/useSources";
 import { useCanvas } from "./hooks/useCanvas";
 
@@ -27,6 +29,7 @@ export default function HomePage() {
   const panels = useResizablePanels();
   const src = useSources();
   const canvas = useCanvas({ sourceId: src.sourceId, sources: src.sources, setSourceId: src.setSourceId, setBusy: src.setBusy });
+  const compareSplit = useCompareSplitResize(!!canvas.secondaryComposedViewId);
 
   useEffect(() => {
     setMounted(true);
@@ -115,9 +118,25 @@ export default function HomePage() {
             <>
               <TabBar
                 aiPages={canvas.aiPages} activeAiPageId={canvas.activeAiPageId} setActiveAiPageId={canvas.setActiveAiPageId}
-                aiPageStatuses={canvas.aiPageStatuses} views={canvas.views} activeViewId={canvas.activeViewId}
-                setActiveViewId={canvas.setActiveViewId} pendingDraft={canvas.pendingDraft} activeView={activeView}
-                applyDraft={() => { if (activeView && canvas.pendingDraft) void canvas.applyDraft(activeView.id, canvas.pendingDraft); }}
+                aiPageStatuses={canvas.aiPageStatuses}
+                views={canvas.views} activeViewId={canvas.activeViewId}
+                savedViewId={canvas.savedViewId}
+                switchToView={(id) => void canvas.switchToView(id)}
+                addViewForSource={() => void canvas.addViewForSource()}
+                duplicateActiveView={() => void canvas.duplicateActiveView()}
+                deleteViewById={(id) => void canvas.deleteViewById(id)}
+                renameViewById={(id, name) => void canvas.renameViewById(id, name)}
+                setDefaultViewById={(id) => void canvas.setDefaultViewById(id)}
+                reorderViewById={(id, dir) => void canvas.reorderViewById(id, dir)}
+                restoreViewVersion={(n) => void canvas.restoreViewVersion(n)}
+                secondaryComposedViewId={canvas.secondaryComposedViewId}
+                toggleComposedSplit={() => canvas.toggleComposedSplit()}
+                setComposedSecondary={(id) => canvas.setComposedSecondary(id)}
+                pendingDraft={canvas.pendingDraft} activeView={activeView}
+                applyDraft={() => {
+                  const vid = activeView?.id ?? canvas.savedViewId;
+                  if (vid && canvas.pendingDraft) void canvas.applyDraft(vid, canvas.pendingDraft);
+                }}
                 busy={src.busy} sourceName={sourceName}
                 generating={canvas.generating}
                 isSaved={canvas.isSaved} isSavingLayout={canvas.isSavingLayout}
@@ -128,26 +147,77 @@ export default function HomePage() {
                 onRegenerate={() => void canvas.regenerate(src.sourceId)}
                 onRefreshData={() => canvas.refreshDynamic("data_change")}
               />
-              <CanvasContent
-                loading={loading} mounted={mounted} sourceId={src.sourceId}
-                generating={canvas.generating} loadingCanvas={canvas.loadingCanvas}
-                canvasError={canvas.canvasError}
-                aiStatus={canvas.aiStatus} aiPages={canvas.aiPages} aiPageStatuses={canvas.aiPageStatuses}
-                activeAiPageId={canvas.activeAiPageId} progressLog={canvas.progressLog}
-                activeView={activeView} rows={canvas.rows}
-                activeColumns={activeColumns} rowKey={String(rowKey)} busy={src.busy}
-                pendingDraft={canvas.pendingDraft}
-                isRefreshingContent={canvas.isRefreshingContent}
-                refreshingComponentIds={canvas.refreshingComponentIds}
-                noSourcesAvailable={!loading && src.sources.length === 0}
-                onOpenCornJobs={() => setCornJobsPage(true)}
-                onRetryAi={() => { if (src.sourceId) void canvas.fetchCanvas(src.sourceId); }}
-                onMarkFollowedUp={() => { canvas.addOfflineMessage(); }}
-                onAgentAction={(msg) => {
-                  if (msg) void canvas.sendSteerMessage(msg);
-                  else canvas.addOfflineMessage();
-                }}
-              />
+              <div
+                ref={compareSplit.containerRef}
+                style={{ flex: 1, display: "flex", flexDirection: "row", minHeight: 0, overflow: "hidden" }}
+              >
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: COMPARE_MIN_PRIMARY,
+                    minHeight: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <CanvasContent
+                    loading={loading} mounted={mounted} sourceId={src.sourceId}
+                    generating={canvas.generating} loadingCanvas={canvas.loadingCanvas}
+                    canvasError={canvas.canvasError}
+                    aiStatus={canvas.aiStatus} aiPages={canvas.aiPages} aiPageStatuses={canvas.aiPageStatuses}
+                    activeAiPageId={canvas.activeAiPageId} progressLog={canvas.progressLog}
+                    activeView={activeView} rows={canvas.rows}
+                    activeColumns={activeColumns} rowKey={String(rowKey)} busy={src.busy}
+                    pendingDraft={canvas.pendingDraft}
+                    isRefreshingContent={canvas.isRefreshingContent}
+                    refreshingComponentIds={canvas.refreshingComponentIds}
+                    noSourcesAvailable={!loading && src.sources.length === 0}
+                    onOpenCornJobs={() => setCornJobsPage(true)}
+                    onRetryAi={() => { if (src.sourceId) void canvas.fetchCanvas(src.sourceId); }}
+                    onMarkFollowedUp={() => { canvas.addOfflineMessage(); }}
+                    onAgentAction={(msg) => {
+                      if (msg) void canvas.sendSteerMessage(msg);
+                      else canvas.addOfflineMessage();
+                    }}
+                  />
+                </div>
+                {canvas.secondaryComposedViewId ? (
+                  <>
+                    <div
+                      onMouseDown={compareSplit.startDragCompare}
+                      className="drag-handle"
+                      title="Drag to resize panes"
+                      style={{
+                        width: 8,
+                        flexShrink: 0,
+                        cursor: "col-resize",
+                        display: "flex",
+                        alignItems: "stretch",
+                        justifyContent: "center",
+                        zIndex: 10,
+                        background: "var(--bg-surface)",
+                      }}
+                    >
+                      <div className="drag-pip" style={{ ...dragPip, alignSelf: "center" }} />
+                    </div>
+                    <div
+                      style={{
+                        width: compareSplit.referenceWidth,
+                        flexShrink: 0,
+                        minHeight: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <ComposedCanvasPane
+                        sourceId={src.sourceId}
+                        viewId={canvas.secondaryComposedViewId}
+                        rows={canvas.rows}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
             </>
           )}
         </main>
