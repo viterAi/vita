@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureKindGrouping } from "@/lib/genui/kind-grouping";
+import { parseGitHubWebhookPayload } from "@/lib/genui/github-event";
 import { resolveGenuiL2Writer, resolveGenuiWorkerJwtClient } from "@/lib/genui/l2-writer";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -17,7 +18,6 @@ export type IngestWorkerRunResult = {
   error?: string;
 };
 
-const LAST_N = Math.max(1, Math.min(50, parseInt(process.env.GENUI_LAST_N ?? "10", 10) || 10));
 const MAX_JOBS_PER_RUN = Math.max(1, Math.min(20, parseInt(process.env.GENUI_INGEST_MAX_JOBS ?? "5", 10) || 5));
 
 type IngestJob = {
@@ -28,16 +28,8 @@ type IngestJob = {
   raw_body: string;
 };
 
-type L2Row = {
-  id: string;
-  payload: unknown;
-  created_at: string;
-  generator: string | null;
-};
-
 /**
- * Claim pending `genui_ingest_jobs` (GitHub webhooks), synthesize payloads, insert `genui_l2`.
- * Mirrors `vita-compare/packages/runtime/scripts/genui-ingest-worker.ts` for Corn jobs cron.
+ * Claim pending `genui_ingest_jobs` (GitHub webhooks), normalize event payloads, insert `genui_l2`.
  */
 export async function runGenuiIngestWorker(): Promise<IngestWorkerRunResult> {
   const workerDb = await resolveGenuiWorkerJwtClient();
@@ -162,21 +154,9 @@ async function processJob(
   const agentGoal = String((chRow as { agent_prompt?: string })?.agent_prompt ?? "").trim();
   const channelSource = String((chRow as { source?: string })?.source ?? "github");
 
-  const { data: lastRows, error: lrErr } = await db
-    .from("genui_l2")
-    .select("id, payload, created_at, generator")
-    .eq("genui_channel_id", row.genui_channel_id)
-    .order("created_at", { ascending: false })
-    .limit(LAST_N);
-
-  if (lrErr) {
-    await markFailed(jobDb, row.id, lrErr.message);
-    return { ...base, status: "failed", error: lrErr.message };
-  }
-
   let payload: Record<string, unknown>;
   try {
-    payload = await buildPayload(row, lastRows ?? [], agentGoal);
+    payload = await buildPayload(row, agentGoal);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await markFailed(jobDb, row.id, msg);
@@ -230,90 +210,78 @@ async function markFailed(workerDb: SupabaseClient, jobId: string, message: stri
 }
 
 async function buildPayload(
-  job: Pick<IngestJob, "ingest_kind" | "raw_body">,
-  lastN: L2Row[],
+  job: Pick<IngestJob, "raw_body">,
   agentGoal: string,
 ): Promise<Record<string, unknown>> {
-  const base = {
-    schema_version: 1,
-    ingest_kind: job.ingest_kind,
-    last_n_count: lastN.length,
-    synthesized_at: new Date().toISOString(),
-    agent_goal: agentGoal,
-  };
+  const event = parseGitHubWebhookPayload(job.raw_body);
+  if (!event) {
+    return {
+      source: "github",
+      event_type: "unknown",
+      repo: "unknown",
+      title: "Unparseable GitHub webhook",
+      actor: "unknown",
+      occurred_at: new Date().toISOString(),
+      highlights: [],
+      summary: "Could not parse GitHub webhook JSON.",
+    };
+  }
 
+  const summary = await summarizeGitHubEvent(event, agentGoal);
+  return {
+    ...event,
+    summary,
+  };
+}
+
+async function summarizeGitHubEvent(
+  event: ReturnType<typeof parseGitHubWebhookPayload> & object,
+  agentGoal: string,
+): Promise<string> {
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   if (!openrouterKey) {
-    return {
-      ...base,
-      stub: true,
-      summary: "Set OPENROUTER_API_KEY to enable LLM synthesis.",
-      raw_preview: job.raw_body.slice(0, 2000),
-    };
+    if (event.event_type === "push" && event.highlights?.length) {
+      return `${event.title}: ${event.highlights[0]}`;
+    }
+    return event.title;
   }
 
   const model = process.env.OPENROUTER_MODEL ?? process.env.GENUI_OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
   const goalLine =
     agentGoal.length > 0
-      ? `The user-defined goal for this GitHub connection:\n${agentGoal}\n\n`
-      : "No explicit user goal was set; infer intent from the webhook payload.\n\n";
+      ? `User goal for this repo connection: ${agentGoal}\n\n`
+      : "";
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openrouterKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: `${goalLine}You help genUI ingest. Reply with a single JSON object only, keys: summary (string), highlights (string array, max 8). Stay aligned with the user goal above.`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            prior_genui_l2: lastN.map((r) => ({
-              id: r.id,
-              created_at: r.created_at,
-              generator: r.generator,
-              payload: r.payload,
-            })),
-            github_webhook_json: safeJsonParse(job.raw_body),
-          }),
-        },
-      ],
-      temperature: 0.2,
-    }),
-  });
-
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenRouter ${res.status}: ${t.slice(0, 500)}`);
-  }
-
-  const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-  let parsed: { summary?: string; highlights?: string[] };
   try {
-    parsed = JSON.parse(text) as { summary?: string; highlights?: string[] };
-  } catch {
-    parsed = { summary: text.slice(0, 500), highlights: [] };
-  }
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openrouterKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              `${goalLine}Write one short plain-English sentence summarizing this GitHub activity for a dashboard. No JSON, no markdown.`,
+          },
+          {
+            role: "user",
+            content: JSON.stringify(event),
+          },
+        ],
+        temperature: 0.2,
+      }),
+    });
 
-  return {
-    ...base,
-    summary: parsed.summary ?? "",
-    highlights: Array.isArray(parsed.highlights) ? parsed.highlights.slice(0, 8) : [],
-    model,
-  };
-}
+    if (!res.ok) return event.title;
 
-function safeJsonParse(s: string): unknown {
-  try {
-    return JSON.parse(s) as unknown;
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = body.choices?.[0]?.message?.content?.trim();
+    return text && text.length > 0 ? text.slice(0, 500) : event.title;
   } catch {
-    return { parse_error: true, raw_slice: s.slice(0, 500) };
+    return event.title;
   }
 }

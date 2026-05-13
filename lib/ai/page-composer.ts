@@ -151,6 +151,7 @@ export async function planPages(input: {
   const sampleRows = input.rows.slice(0, 20);
   const schemaFields = Array.from(new Set(sampleRows.flatMap((row) => Object.keys(row))));
 
+  const isGithub = input.source.channel === "github";
   const prompt = [
     "You are designing a multi-page dashboard for the given source data.",
     "Plan which pages to create. Return JSON only.",
@@ -160,6 +161,12 @@ export async function planPages(input: {
     "- 1 to 4 pages only",
     "- description should explain the business purpose of the page",
     "- do NOT include components yet, just the plan",
+    ...(isGithub
+      ? [
+          "- This is a GitHub repo feed: plan pages around pushes, PRs, issues, and releases",
+          "- NEVER plan pages about ingest jobs, schema_version, agent_goal, or internal pipeline metadata",
+        ]
+      : []),
     "",
     `Source name: ${input.source.name}`,
     `Source channel: ${input.source.channel ?? "unknown"}`,
@@ -217,6 +224,8 @@ export async function fillPageComponents(input: {
     // reference and amend existing components by component_id.
     // The steer loop will be overhauled in T-007.
 
+    const isGithub = input.source.channel === "github";
+
     if (!isSteer) {
       const nodeTypes = [
         "metric_summary — key numbers at a glance (maps to kpi_row / metric_card)",
@@ -257,6 +266,12 @@ export async function fillPageComponents(input: {
         hasRows
           ? "- structured rows exist — ranked_list, breakdown, trend, timeline are all appropriate when the schema fields support them"
           : "- NO structured rows — prefer metric_summary, text_summary, filter_controls, action_panel",
+        ...(isGithub
+          ? [
+              "- GitHub source: prefer ranked_list/timeline on event_type, title, actor, ref, occurred_at, summary, highlights",
+              "- Use text_summary for narrative; do NOT build tables of ingest_kind, agent_goal, schema_version, or model",
+            ]
+          : []),
         "",
         "Example output:",
         ABSTRACT_NODE_EXAMPLE,

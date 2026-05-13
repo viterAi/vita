@@ -143,7 +143,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: jobErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, job_id: job?.id, genui_channel_id: channelId }, { status: 202 });
+  // Process immediately so L2 has GitHub events without waiting for a separate cron tick.
+  let ingest: { processed: number; ok: boolean; error?: string } | null = null;
+  try {
+    const { runGenuiIngestWorker } = await import("@/lib/genui/run-ingest-worker");
+    const out = await runGenuiIngestWorker();
+    ingest = { processed: out.processed, ok: out.ok, error: out.error };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[github/genui] ingest worker failed:", msg);
+    ingest = { processed: 0, ok: false, error: msg };
+  }
+
+  return NextResponse.json(
+    { ok: true, job_id: job?.id, genui_channel_id: channelId, ingest },
+    { status: ingest?.ok === false && ingest.processed === 0 ? 202 : 200 },
+  );
 }
 
 function isUuid(s: string): boolean {

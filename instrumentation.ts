@@ -37,7 +37,13 @@ function startMailPollInterval() {
 
   void import("@/lib/mail-poll/run-mail-poll").then(({ runMailPoll }) => {
     const tick = () => {
-      void runMailPoll().catch((err) => console.error("[mail-poll] interval run failed:", err));
+      void runMailPoll()
+        .then(() =>
+          import("@/lib/genui/run-ingest-worker").then(({ runGenuiIngestWorker }) =>
+            runGenuiIngestWorker(),
+          ),
+        )
+        .catch((err) => console.error("[mail-poll] interval run failed:", err));
     };
 
     const initialDelayMs = Math.min(15_000, Math.max(0, Math.floor(ms / 10)));

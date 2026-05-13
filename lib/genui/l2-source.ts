@@ -18,6 +18,7 @@
  * doesn't care which format the key was in.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeGithubPayloadForDisplay } from "@/lib/genui/github-event";
 import type { SourceDataRow } from "../types/view-builder";
 import {
   GROUP_KEY_SEPARATOR,
@@ -334,7 +335,9 @@ export function l2RowsToSourceDataRows(
   channelSource: string,
 ): SourceDataRow[] {
   return rows.map((row) => {
-    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    const raw = (row.payload ?? {}) as Record<string, unknown>;
+    const payload =
+      channelSource === "github" ? normalizeGithubPayloadForDisplay(raw) : raw;
     return {
       ...payload,
       id: row.id,
