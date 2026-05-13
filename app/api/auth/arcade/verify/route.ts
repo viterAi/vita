@@ -54,10 +54,22 @@ export async function GET(req: Request) {
     console.log("[arcade/verify] confirmUser →", { flow_id: flowId, user_id: arcadeUserId });
     const result = await client.auth.confirmUser({ flow_id: flowId, user_id: arcadeUserId });
     console.log("[arcade/verify] confirmUser result:", result);
-    const redirectTo = result.next_uri ?? nextUri ?? "/";
+    const redirectTo =
+      result.next_uri ??
+      nextUri ??
+      (result.auth_id
+        ? `/auth/arcade/done?auth_id=${encodeURIComponent(result.auth_id)}`
+        : "/auth/arcade/done");
     return NextResponse.redirect(redirectTo);
   } catch (err) {
     console.error("[arcade/verify] confirmUser failed:", err);
-    return new NextResponse("Verification failed", { status: 500 });
+    const message =
+      err && typeof err === "object" && "message" in err
+        ? String((err as { message?: unknown }).message)
+        : "Verification failed";
+    return new NextResponse(
+      `Arcade verification failed. Sign in to the app with the same account that started connect, then try again.\n\n${message}`,
+      { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } },
+    );
   }
 }

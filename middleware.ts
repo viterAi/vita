@@ -34,10 +34,12 @@ export async function middleware(request: NextRequest) {
   const isGenuiGithubIngestWebhook =
     pathname === "/api/integrations/github/genui" && request.method === "POST";
   const isCronRoute = pathname.startsWith("/api/cron/");
+  const isArcadeVerifyRoute = pathname === "/api/auth/arcade/verify";
+  const isArcadeDonePage = pathname === "/auth/arcade/done";
 
-  if (!user && !isLoginPage) {
+  if (!user && !isLoginPage && !isArcadeDonePage) {
     if (isApiRoute) {
-      if (isGenuiGithubIngestWebhook || isCronRoute) {
+      if (isGenuiGithubIngestWebhook || isCronRoute || isArcadeVerifyRoute) {
         return supabaseResponse;
       }
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
