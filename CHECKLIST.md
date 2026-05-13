@@ -36,7 +36,7 @@ Check off each item when complete. Items marked ⚡ are blocking other work.
 
 - [x] Three-layer architecture understood: murmur (top), surface (center), dock (bottom)
 - [x] Generated views render on the surface layer
-- [ ] Dock functions as the Steer interface (no separate right-rail needed) — UI + API route scaffolded, not yet connected to real agent
+- [ ] Dock functions as the Steer interface (no separate right-rail needed) — dock UI + `/api/sources/.../steer` wired (OpenRouter classifier, SSE streaming); §7 product behaviors (persist steer-driven spec changes, threads, etc.) still open
 - [x] Shell loads saved spec on open — no AI generation call for existing views
 - [x] Shell re-renders only dynamic components when triggers fire
 - [ ] Auth context passed to generated views (who's viewing, permissions) — `useUser()` exists, not yet threaded into `CanvasContent`
@@ -266,7 +266,7 @@ Each skill = a SKILL.md file in the repo. Not a prompt buried in code.
 
 ## 16. genUI ingest & channels (Gui + vita-compare)
 
-Ticket: `docs/skills/T-023-genui-webhook-ingest.md`. New tables use the **`genui_`** prefix. **Flow:** GitHub → **Arcade** (raw relay) → **HTTPS handler** (GitHub HMAC + fast **enqueue**) → **`genui_ingest_jobs`** → **polling worker** (per-tenant **machine user JWT**, last **N** `genui_l2`, LLM, **insert** `genui_l2`). **Split auth:** **service_role** only for **`genui_ingest_jobs` enqueue** (and admin paths such as channel secrets); **`genui_l2` inserts use machine-user JWT** (trigger requires `auth.uid()` — no routine service-role writes on L2). **Reconciliation** uses the **same job table** (`ingest_kind: reconciliation`). **Arcade MCP** = separate tool-calling surface for other agents, not the ingest LLM host.
+Tickets: **`docs/skills/T-023-genui-webhook-ingest.md`** (ingest pipeline), **`docs/skills/T-024-corn-jobs-connect-flow.md`** (Arcade Auth connect UX — Corn jobs). Orchestration index: **`docs/skills/000-INDEX.md`**. New tables use the **`genui_`** prefix. **Flow:** GitHub → **Arcade** (raw relay) → **HTTPS handler** (GitHub HMAC + fast **enqueue**) → **`genui_ingest_jobs`** → **polling worker** (per-tenant **machine user JWT**, last **N** `genui_l2`, LLM, **insert** `genui_l2`). **Split auth:** **service_role** only for **`genui_ingest_jobs` enqueue** (and admin paths such as channel secrets); **`genui_l2` inserts use machine-user JWT** (trigger requires `auth.uid()` — no routine service-role writes on L2). **Reconciliation** uses the **same job table** (`ingest_kind: reconciliation`). **Arcade MCP** = separate tool-calling surface for other agents, not the ingest LLM host.
 
 **`genui_l2` ownership & visibility (L0 migrations)**
 
@@ -297,7 +297,7 @@ Ticket: `docs/skills/T-023-genui-webhook-ingest.md`. New tables use the **`genui
 
 - [x] **`lib/mail-poll/run-mail-poll.ts`** + **`GET /api/cron/mail-poll`** (optional **`CRON_SECRET`**); service role for **`genui_channels`** reads/updates, machine user for **`genui_l2`**
 - [x] **`instrumentation.ts`** — in-process interval when **`MAIL_POLL_INTERVAL_MS`** ≥ 60000 (intended for **`next start`** / local dev; **ignored on `VERCEL=1`** unless **`MAIL_POLL_ALLOW_VERCEL_INTERVAL=1`**)
-- [ ] **Production schedule on Vercel serverless** — use an **external** scheduler hitting **`GET /api/cron/mail-poll`**, or deploy long-lived Node, or move to **push** (Gmail watch / Graph subscriptions)
+- [x] **Production schedule on Vercel serverless** — **`vercel.json`** hits **`GET /api/cron/mail-poll`** + **`GET /api/cron/genui-ingest`** every **5 min** (requires **`CRON_SECRET`**). Alternatives: external scheduler or long-lived Node with **`MAIL_POLL_INTERVAL_MS`**; **push** (Gmail watch / Graph subscriptions) still a follow-up
 
 **Reconciliation**
 
@@ -318,8 +318,9 @@ Ticket: `docs/skills/T-023-genui-webhook-ingest.md`. New tables use the **`genui
 ## Phase Gates
 
 **Gate 1 — Foundation (current):**
-Sections 1, 2, 3, 12 complete. Spec format approved. Integration plan approved. Components accept design tokens from the start.
-*Progress:* Sections 1 and 2 are complete. Section 3 is ~60% done — auth infrastructure is in, 4 API routes still need auth guards + real DB queries. Section 12 code quality items are mostly done.
+Sections **1**, **2**, and parts of **12** are complete; **3** remains in progress (unchecked rows in §3). Spec format and integration plan are approved; components accept design tokens.
+
+*Progress:* §§**1–2** done. §**3**: middleware, `UserProvider`, and the auth-guarded API routes under “Auth wiring sub-tasks” are done; still open: `CanvasContent` auth threading, centralized action routing, events logging, and full Steer parity with §7. §**12**: `page.tsx` refactor and granular commits done; spec/component tests and dead-code sweep still open.
 
 **Gate 2 — Core Loop:**
 Sections 4, 5, 6, 7 complete. Dock-as-Steer working. Views save and load. Actions write back.

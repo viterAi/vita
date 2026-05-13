@@ -73,9 +73,9 @@ Tables created: `sources`, `views`, `view_versions`, `view_drafts`, `view_events
 | `GENUI_L2_MACHINE_EMAIL` / `GENUI_L2_MACHINE_PASSWORD` | Supabase Auth **machine user** for `genui_l2` inserts when attributed ID unset (falls back to `GENUI_WORKER_*`) |
 | `GENUI_WORKER_EMAIL` / `GENUI_WORKER_PASSWORD` | Same machine account if you do not set `GENUI_L2_MACHINE_*` |
 | `MAIL_POLL_INTERVAL_MS` | e.g. `300000` — in-process mail poll every 5 min via `instrumentation.ts` (**local dev** or long-lived `next start`; **not** on Vercel serverless unless you opt in — see `.env.example`) |
-| `CRON_SECRET` | If set, `GET /api/cron/mail-poll` requires `Authorization: Bearer …` |
+| `CRON_SECRET` | **Required on Vercel** for cron: set in Project → Env; each production cron `GET` includes `Authorization: Bearer <CRON_SECRET>`. Applies to **`/api/cron/mail-poll`** and **`/api/cron/genui-ingest`**. Avoid special characters/newlines in the value. |
 
-**Scheduling:** There is no `vercel.json` cron in this repo. Choose one: set **`MAIL_POLL_INTERVAL_MS`** for a long-lived Node host, **`curl` the mail-poll route** from any external scheduler, or add your own Vercel Cron in the dashboard / config.
+**Scheduling:** **`vercel.json`** defines production crons (**every 5 minutes** UTC) for mail poll + GitHub ingest. They run only on the **Production** deployment. Locally: **`MAIL_POLL_INTERVAL_MS`** for in-process polling, or **`curl`** the cron routes manually. On a non-Vercel long-lived host without crons: same **`MAIL_POLL_INTERVAL_MS`** or external scheduler.
 
 ### 3. Install & run
 
@@ -103,7 +103,8 @@ app/
   login/page.tsx        # Login page
   api/
     bootstrap/          # GET  — session info (userId, email, tenantId, role)
-    cron/mail-poll/     # GET  — Gmail/Outlook poll → genui_l2 (optional CRON_SECRET)
+    cron/mail-poll/     # GET  — Gmail/Outlook poll → genui_l2 (CRON_SECRET on Vercel)
+    cron/genui-ingest/  # GET  — drain GitHub ingest jobs → genui_l2 (CRON_SECRET on Vercel)
     genui/              # GET/POST — genUI channels + config (Corn jobs)
     integrations/github/genui/  # POST — GitHub ingest enqueue (Arcade relay)
     sources/            # GET  — list sources (mock L0 chats)

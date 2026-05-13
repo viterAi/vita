@@ -143,7 +143,7 @@ Store **raw body** policy: if bodies are large, **store pointer** or truncated h
 
 **Ops:** Create a Supabase Auth **machine** user, add to **`tenant_members`** for every tenant that runs ingest or mail poll, set **`GENUI_L2_MACHINE_*`** or **`GENUI_WORKER_*`** plus L0 URL + anon key. **Or** set **`GENUI_L2_ATTRIBUTED_USER_ID`** to a member UUID and use **service role** for mail poll L2 inserts (no password). Apply migrations. Users configure each GitHub repo (and signing secret + prompt) in **Corn / genUI settings** before webhooks are accepted (`unknown_repo` otherwise).
 
-**Mail poll scheduling:** This repo does not ship `vercel.json` cron. Use **`MAIL_POLL_INTERVAL_MS`** with long-lived **`next start`**, **`GET /api/cron/mail-poll`** from any external scheduler (optional **`CRON_SECRET`**), or configure cron in the host dashboard. On **Vercel serverless**, in-process polling is **off** unless `MAIL_POLL_ALLOW_VERCEL_INTERVAL=1` (can duplicate work across instances).
+**Mail poll scheduling:** **`vercel.json`** schedules **`GET /api/cron/mail-poll`** and **`GET /api/cron/genui-ingest`** in production; set **`CRON_SECRET`** in Vercel. For local or long-lived **`next start`**, use **`MAIL_POLL_INTERVAL_MS`** / **`GENUI_INGEST_INTERVAL_MS`**, or **`curl`** the cron routes. On **Vercel serverless**, in-process polling is **off** unless `MAIL_POLL_ALLOW_VERCEL_INTERVAL=1` (can duplicate work across instances).
 
 **Reconciliation:** Same job table — insert `genui_ingest_jobs` rows with `ingest_kind = 'reconciliation'` (via service role / SQL / small internal route) and run the worker; not yet automated as a scheduled job in code.
 
