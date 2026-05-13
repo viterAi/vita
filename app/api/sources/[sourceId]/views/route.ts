@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseServerClient } from "../../../../../lib/supabase/server";
 import { decodeSourceIdPathSegment } from "@/lib/genui/source-key";
+import { ensureSpecQuality } from "../../../../../lib/view/spec-quality";
+import type { PersistedViewSpec } from "../../../../../lib/types/view-builder";
 
 const createViewSchema = z.object({
   viewName: z.string().min(1).default("Default"),
@@ -104,6 +106,14 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  const qualitySpec = ensureSpecQuality(spec as PersistedViewSpec);
+  await supabase.from("view_versions").insert({
+    view_id: data.id,
+    version_number: 1,
+    spec: qualitySpec,
+    summary: "Initial layout",
+  });
 
   return NextResponse.json({ view: data }, { status: 201 });
 }

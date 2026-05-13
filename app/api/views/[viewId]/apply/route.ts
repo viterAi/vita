@@ -8,6 +8,8 @@ const applySchema = z.object({
   spec: z.record(z.string(), z.unknown()).optional(),
   summary: z.string().min(1),
   draftId: z.string().uuid().optional(),
+  /** Shallow-merged into existing `views.ui_state` after apply (e.g. steer_messages). */
+  ui_state: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(
@@ -81,17 +83,19 @@ export async function POST(
     return NextResponse.json({ error: versionError.message }, { status: 500 });
   }
 
+  const mergedUiState = {
+    ...((existingView.ui_state ?? {}) as Record<string, unknown>),
+    source_fingerprint:
+      draftSourceFingerprint ?? ((existingView.ui_state as Record<string, unknown>)?.source_fingerprint ?? null),
+    ...(body.ui_state ?? {}),
+  };
+
   const { data: updatedView, error: updateError } = await supabase
     .from("views")
     .update({
       spec: qualityCheckedSpec,
       current_spec_version: nextVersion,
-      ui_state: {
-        ...(existingView.ui_state ?? {}),
-        source_fingerprint:
-          draftSourceFingerprint ??
-          (existingView.ui_state?.source_fingerprint ?? null),
-      },
+      ui_state: mergedUiState,
       updated_at: new Date().toISOString(),
     })
     .eq("id", viewId)

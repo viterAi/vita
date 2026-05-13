@@ -5,4 +5,6 @@ dist
 out
 private
 .env
+ACCOUNTS.md
 whatapp/
+vita-compare

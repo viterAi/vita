@@ -69,9 +69,13 @@ export type View = {
   id: string;
   source_id: string;
   view_name: string;
-  view_type: "aging_table" | "follow_up_kanban";
+  /** Stored as DB string — includes legacy `aging_table` / `follow_up_kanban` and AI layouts (`spatial`, …). */
+  view_type: string;
   is_default: boolean;
+  sort_order?: number;
+  current_spec_version?: number;
   spec?: {
+    ai_pages?: AiPage[];
     layout?: {
       row_key?: string;
       columns?:
@@ -84,6 +88,7 @@ export type View = {
         | string[];
     };
   };
+  ui_state?: Record<string, unknown>;
 };
 
 export type Row = Record<string, string | number | boolean | null>;

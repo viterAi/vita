@@ -33,6 +33,8 @@ All Wave 1 tickets are done as of May 10, 2026. Wave 2 is unblocked.
 
 ### Wave 2 — Core Loop (can run mostly in parallel after Wave 1)
 
+*Rough alignment with [`CHECKLIST.md`](../../CHECKLIST.md) §§3–7: auth + shell mostly landed; connector / multi-view / full Steer product loop still open.*
+
 | # | Ticket | Est. | Depends on |
 |---|--------|------|------------|
 | 5 | T-005 — View persistence: save/load/regenerate | 1d | T-003 |
@@ -70,6 +72,14 @@ All Wave 1 tickets are done as of May 10, 2026. Wave 2 is unblocked.
 | 22 | T-022 — Multi-surface renderer: WhatsApp + email | 1.5d | T-018 |
 | 23 | T-023 — genUI ingest: Arcade raw relay, `genui_ingest_jobs`, worker, `genui_channels`, `genui_l2` RLS + ownership | 2–3d | Gui + `vita-compare/infra/supabase/migrations/` (see `20260513120000_genui_l2_created_by_visibility.sql`) |
 
+### Wave 6 — Connect UX (after T-023 pipeline)
+
+| # | Ticket | Est. | Depends on |
+|---|--------|------|------------|
+| 24 | T-024 — Corn jobs: Arcade Auth connect flow (GitHub / Gmail / Outlook under 60s) | 3–4d | T-023 |
+
+**Live status for genUI:** Implementation detail and checkbox state for ingest, L2 consumption in the UI, and sidebar grouping live in repo root [`CHECKLIST.md`](../../CHECKLIST.md) §§16–18 (keep this index’s waves aligned when those sections move).
+
 ---
 
 ## Parallelization Map
@@ -87,6 +97,7 @@ After Wave 3 is complete:
 After Wave 4:
 **Group F (Delivery):** T-017 → T-018 → T-022
 **Group F2 (genUI data plane):** T-023 (vita-compare Supabase + automation; can run in parallel with T-022 once repo ownership is clear)
+**Group F3 (connect UX):** T-024 (after T-023 pipeline; Corn jobs modal + Arcade Auth)
 **Group G (Advanced views):** T-019, T-020 (parallel)
 **Group H (Theming):** T-021
 
@@ -144,3 +155,4 @@ The individual ticket files are:
 - T-021-source-design-tokens.md
 - T-022-multi-surface-renderer.md
 - T-023-genui-webhook-ingest.md
+- T-024-corn-jobs-connect-flow.md
