@@ -1,4 +1,4 @@
-# vita
+# viter-org
 
 A personal knowledge platform built on SHELET — a four-layer architecture that enforces traceable, reproducible, citation-verified knowledge management at the database layer.
 

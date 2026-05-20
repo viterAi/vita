@@ -1,4 +1,4 @@
-# vita — Runbook
+# viter-org — Runbook
 
 **Last updated:** 2026-05-14
 **Audience:** A new engineer who needs to be productive on this codebase in one day.
@@ -9,7 +9,7 @@ This runbook is the answer to Shaul's question *"could another engineer pick thi
 
 ## What this is
 
-`vita` is the platform substrate Mordechai built for Viter. It's a Next.js 16 + React 19 monorepo containing:
+`viter-org` is the platform substrate Mordechai built for Viter. It's a Next.js 16 + React 19 monorepo containing:
 
 - **`apps/web/`** — the user-facing UI: chat, meetings, spaces, settings
 - **`packages/runtime/`** — extractors, synthesizers, citation parser, LLM client
@@ -17,7 +17,7 @@ This runbook is the answer to Shaul's question *"could another engineer pick thi
 - **`packages/spec/`, `packages/ui/`, `packages/ontology/`** — shared types + UI primitives + ontology layer
 - **`adapters/whatsapp-gowa/`** — the working WhatsApp adapter (508 LOC)
 - **`adapters/{browser,desktop,file-watcher,hil,http,mcp}/`** — scaffolded adapter types (most are package.json only)
-- **`infra/supabase/`** — edge functions + migrations for the vita Supabase project (`dkccadwohifcqcdzhhnu`)
+- **`infra/supabase/`** — edge functions + migrations for the viter-org Supabase project (`dkccadwohifcqcdzhhnu`)
 - **`scripts/`** — backfills, smoke tests, ingestion utilities
 
 Deploy: `vita-roan.vercel.app` (Vercel project `vita-platform` on viter team `viter2`).
@@ -46,6 +46,8 @@ pnpm install
 ```
 
 Install takes 2–3 minutes the first time.
+
+> **Naming note:** the GitHub repo is `viterAi/vita` (historical) and a fresh clone lands in `vita/`. The substrate it backs is now called `viter-org` in Supabase, and Mordechai's local working tree has been `mv`-renamed to `viter-org/` for consistency. Either name works locally; `viter-org` is the name the docs prefer going forward. The GitHub repo rename is a separate, later move.
 
 ## Environment variables
 
@@ -78,7 +80,7 @@ pnpm dev
 
 Open `http://localhost:3000`. Sign in with one of the allowlisted emails (Supabase magic link → email → click link → redirected back to localhost).
 
-If magic link redirects break: check that `http://localhost:3000` is in the Supabase Auth → URL Configuration → Redirect URLs list. The vita project at dkccadwohifcqcdzhhnu should already have it.
+If magic link redirects break: check that `http://localhost:3000` is in the Supabase Auth → URL Configuration → Redirect URLs list. The viter-org project at dkccadwohifcqcdzhhnu should already have it.
 
 ## Build + deploy
 
@@ -138,7 +140,7 @@ Future WhatsApp messages from that number will resolve to Jane's principal.
 ### Running a backfill from a WhatsApp zip export
 
 ```bash
-cd ~/viter-workspace/vita
+cd ~/viter-workspace/viter-org
 pnpm tsx scripts/ingest-zip.ts ~/Downloads/WhatsApp\ Chat\ -\ \<name\>.zip
 ```
 
@@ -147,7 +149,7 @@ This reads the zip, extracts attachments + chat, ingests into `l0_artifacts` + `
 ### Re-synthesizing a day's L2 from scratch
 
 ```bash
-cd ~/viter-workspace/vita
+cd ~/viter-workspace/viter-org
 pnpm tsx scripts/synthesize.ts day 2026-05-13
 ```
 
@@ -187,8 +189,8 @@ The `index-l3` skill runs on every Claude Code SessionEnd hook (`.claude/hooks/r
 | Vercel project `vita-platform` | Viter team `viter2` ✓ | (migrated 2026-05-14) |
 | Vercel project `vita-web` (Yitzchak's) | Viter team `viter2` | (his sandbox) |
 | Vercel project `viter-recon` | Mordechai personal — **pending migration** | mordechaipotashs-projects |
-| Supabase `dkccadwohifcqcdzhhnu` (vita) | **Viter Pro org** (`devteam@viter.ai`) ✓ | devteam@viter.ai |
-| Supabase `mcghcqbjtwtkdyezcswr` (recon, named "viter") | **Viter Pro org** (`devteam@viter.ai`) ✓ | devteam@viter.ai |
+| Supabase `dkccadwohifcqcdzhhnu` (viter-org) | **Viter Pro org** (`devteam@viter.ai`) ✓ | devteam@viter.ai |
+| Supabase `mcghcqbjtwtkdyezcswr` (recon, formerly "viter", now "insp-org") | **Viter Pro org** (`devteam@viter.ai`) ✓ | devteam@viter.ai |
 | Supabase `vwqalkghhdgjumjdgtpd` (Yitzchak's "Knowledge Agent") | **Viter Pro org** (`devteam@viter.ai`) — Viter is paying | devteam@viter.ai |
 | Trigger.dev org | Mordechai personal | mordechaipotash@gmail.com |
 | OpenRouter API | Mordechai personal | mordechaipotash@gmail.com |
@@ -200,7 +202,7 @@ Full ownership table + migration plan: `library/REPORT.md` Part 6.
 
 | Role | Person | Where to reach |
 |---|---|---|
-| Platform substrate, L0→L3, vita repo | Mordechai Potash | WhatsApp; mordechai@viter.ai |
+| Platform substrate, L0→L3, viter-org repo | Mordechai Potash | WhatsApp; mordechai@viter.ai |
 | genUI sandbox (`vita-web`, viterAi/vita genUI branch) | Yitzchak Brown (Issac Brown) | WhatsApp; issacbrown@viter.ai |
 | Product direction, Viter org | Shaul Levine | WhatsApp; shaul@viter.ai |
 | Insperanto domain questions (Plunet, Xero, reconciliation logic) | Jeffrey Levine (via Shaul or direct) | WhatsApp |
@@ -210,7 +212,7 @@ Full ownership table + migration plan: `library/REPORT.md` Part 6.
 1. Read `library/REPORT.md` end-to-end — 1 hour
 2. Read `library/bucket-a-viter/l-pipeline.md` + `vita-platform.md` — 30 min
 3. Clone + install + run locally + sign in → verify end-to-end works — 1 hour
-4. Read 2–3 recent Claude Code sessions in `~/.claude/projects/-Users-mordechai-viter-workspace-vita/*.jsonl` for context on how decisions were made — 1–2 hours
+4. Read 2–3 recent Claude Code sessions in `~/.claude/projects/-Users-mordechai-viter-workspace-viter-org/*.jsonl` for context on how decisions were made — 1–2 hours
 5. Pick a Trigger.dev job (e.g., `claim-extract.ts`), read it end-to-end, understand the flow — 1 hour
 6. Make a small contribution (a typo fix, a doc improvement) via PR — verifies your dev loop end-to-end
 
